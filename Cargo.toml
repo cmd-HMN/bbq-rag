@@ -1,0 +1,30 @@
+[package]
+name = "maxsimd"
+version = "0.1.0"
+edition = "2024"
+homepage = "https://github.com/cmd-HMN"
+description = "This packages is the simd implementations of max sim function for faster calculation"
+# readme = "README.md"
+keywords = ["maxsimd"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lib]
+name = "maxsimd"
+path="rust-core/lib.rs"
+crate-type = ["cdylib", "rlib"]
+
+[lints]
+rust.unsafe_code = "allow"
+
+[dependencies]
+pyo3 = "0.29.0"
+pulp = "0.22.3"
+rayon   = "1.10"
+numpy   = "0.29"
+blas    = "0.23"
+pyo3-stub-gen = "0.23.0"
+libc    = "0.2"
+
+[[bin]]
+name = "stub"
+path = "rust-core/_bin/stub.rs"
