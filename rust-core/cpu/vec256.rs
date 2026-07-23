@@ -1,12 +1,36 @@
-// Max simd vectorization
-// - avx2 (Intel x86_64)
-// - no fma for now
+// Copyright 2024 cmd-HMN
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
-mod simd {
+//! MaxSim
+//!
+//! Requires either:
+//! - x86_64 with AVX2
+
+pub mod simd {
     use core::f32;
     #[cfg(target_arch = "x86_64")]
     use std::arch::x86_64::*;
 
+
+    // ---------------------------------------
+    // f32 dot product functions
+    //
+    // # Observation
+    // These aren't a good approach for matrix multiplication
+    // But they are useful for vector dot product
+    // 1-D dot product
+    // ---------------------------------------
     #[inline(always)]
     pub fn load_vec256(data: &[f32], offset: usize) -> __m256 {
         unsafe { _mm256_loadu_ps(data.as_ptr().add(offset)) }
@@ -65,7 +89,6 @@ mod simd {
             }
             // return
             sum
-
         }
     }
 
@@ -97,11 +120,14 @@ mod simd {
                 _acc3 = _mm256_add_ps(_acc3, _mm256_mul_ps(_a3, _b3));
                 i += 32;
             }
-            
+
             //left overs
             while i + 16 <= _len {
                 _acc0 = _mm256_add_ps(_acc0, _mm256_mul_ps(load_vec256(a, i), load_vec256(b, i)));
-                _acc1 = _mm256_add_ps(_acc1, _mm256_mul_ps(load_vec256(a, i + 8), load_vec256(b, i + 8)));
+                _acc1 = _mm256_add_ps(
+                    _acc1,
+                    _mm256_mul_ps(load_vec256(a, i + 8), load_vec256(b, i + 8)),
+                );
                 i += 16;
             }
 
@@ -112,7 +138,7 @@ mod simd {
 
             let _acc = _mm256_add_ps(_acc0, _mm256_add_ps(_acc1, _mm256_add_ps(_acc2, _acc3)));
             let mut sum = horizontal_sum(_acc);
-            
+
             while i < _len {
                 sum += a[i] * b[i];
                 i += 1;
@@ -161,15 +187,27 @@ mod simd {
 
             while i + 32 <= _len {
                 _acc0 = _mm256_add_ps(_acc0, _mm256_mul_ps(load_vec256(a, i), load_vec256(b, i)));
-                _acc1 = _mm256_add_ps(_acc1, _mm256_mul_ps(load_vec256(a, i + 8), load_vec256(b, i + 8)));
-                _acc2 = _mm256_add_ps(_acc2, _mm256_mul_ps(load_vec256(a, i + 16), load_vec256(b, i + 16)));
-                _acc3 = _mm256_add_ps(_acc3, _mm256_mul_ps(load_vec256(a, i + 24), load_vec256(b, i + 24)));
+                _acc1 = _mm256_add_ps(
+                    _acc1,
+                    _mm256_mul_ps(load_vec256(a, i + 8), load_vec256(b, i + 8)),
+                );
+                _acc2 = _mm256_add_ps(
+                    _acc2,
+                    _mm256_mul_ps(load_vec256(a, i + 16), load_vec256(b, i + 16)),
+                );
+                _acc3 = _mm256_add_ps(
+                    _acc3,
+                    _mm256_mul_ps(load_vec256(a, i + 24), load_vec256(b, i + 24)),
+                );
                 i += 32;
             }
 
             while i + 16 <= _len {
                 _acc0 = _mm256_add_ps(_acc0, _mm256_mul_ps(load_vec256(a, i), load_vec256(b, i)));
-                _acc1 = _mm256_add_ps(_acc1, _mm256_mul_ps(load_vec256(a, i + 8), load_vec256(b, i + 8)));
+                _acc1 = _mm256_add_ps(
+                    _acc1,
+                    _mm256_mul_ps(load_vec256(a, i + 8), load_vec256(b, i + 8)),
+                );
                 i += 16;
             }
 
@@ -178,9 +216,15 @@ mod simd {
                 i += 8;
             }
 
-            let _acc = _mm256_add_ps(_acc0, _mm256_add_ps(_acc1, _mm256_add_ps(_acc2, _mm256_add_ps(_acc3, _mm256_add_ps(_acc4, _acc5)))));
+            let _acc = _mm256_add_ps(
+                _acc0,
+                _mm256_add_ps(
+                    _acc1,
+                    _mm256_add_ps(_acc2, _mm256_add_ps(_acc3, _mm256_add_ps(_acc4, _acc5))),
+                ),
+            );
             let mut sum = horizontal_sum(_acc);
-            
+
             while i < _len {
                 sum += a[i] * b[i];
                 i += 1;
@@ -237,25 +281,52 @@ mod simd {
 
             while i + 48 <= _len {
                 _acc0 = _mm256_add_ps(_acc0, _mm256_mul_ps(load_vec256(a, i), load_vec256(b, i)));
-                _acc1 = _mm256_add_ps(_acc1, _mm256_mul_ps(load_vec256(a, i + 8), load_vec256(b, i + 8)));
-                _acc2 = _mm256_add_ps(_acc2, _mm256_mul_ps(load_vec256(a, i + 16), load_vec256(b, i + 16)));
-                _acc3 = _mm256_add_ps(_acc3, _mm256_mul_ps(load_vec256(a, i + 24), load_vec256(b, i + 24)));
-                _acc4 = _mm256_add_ps(_acc4, _mm256_mul_ps(load_vec256(a, i + 32), load_vec256(b, i + 32)));
-                _acc5 = _mm256_add_ps(_acc5, _mm256_mul_ps(load_vec256(a, i + 40), load_vec256(b, i + 40)));
+                _acc1 = _mm256_add_ps(
+                    _acc1,
+                    _mm256_mul_ps(load_vec256(a, i + 8), load_vec256(b, i + 8)),
+                );
+                _acc2 = _mm256_add_ps(
+                    _acc2,
+                    _mm256_mul_ps(load_vec256(a, i + 16), load_vec256(b, i + 16)),
+                );
+                _acc3 = _mm256_add_ps(
+                    _acc3,
+                    _mm256_mul_ps(load_vec256(a, i + 24), load_vec256(b, i + 24)),
+                );
+                _acc4 = _mm256_add_ps(
+                    _acc4,
+                    _mm256_mul_ps(load_vec256(a, i + 32), load_vec256(b, i + 32)),
+                );
+                _acc5 = _mm256_add_ps(
+                    _acc5,
+                    _mm256_mul_ps(load_vec256(a, i + 40), load_vec256(b, i + 40)),
+                );
                 i += 48;
             }
 
             while i + 32 <= _len {
                 _acc0 = _mm256_add_ps(_acc0, _mm256_mul_ps(load_vec256(a, i), load_vec256(b, i)));
-                _acc1 = _mm256_add_ps(_acc1, _mm256_mul_ps(load_vec256(a, i + 8), load_vec256(b, i + 8)));
-                _acc2 = _mm256_add_ps(_acc2, _mm256_mul_ps(load_vec256(a, i + 16), load_vec256(b, i + 16)));
-                _acc3 = _mm256_add_ps(_acc3, _mm256_mul_ps(load_vec256(a, i + 24), load_vec256(b, i + 24)));
+                _acc1 = _mm256_add_ps(
+                    _acc1,
+                    _mm256_mul_ps(load_vec256(a, i + 8), load_vec256(b, i + 8)),
+                );
+                _acc2 = _mm256_add_ps(
+                    _acc2,
+                    _mm256_mul_ps(load_vec256(a, i + 16), load_vec256(b, i + 16)),
+                );
+                _acc3 = _mm256_add_ps(
+                    _acc3,
+                    _mm256_mul_ps(load_vec256(a, i + 24), load_vec256(b, i + 24)),
+                );
                 i += 32;
             }
 
             while i + 16 <= _len {
                 _acc0 = _mm256_add_ps(_acc0, _mm256_mul_ps(load_vec256(a, i), load_vec256(b, i)));
-                _acc1 = _mm256_add_ps(_acc1, _mm256_mul_ps(load_vec256(a, i + 8), load_vec256(b, i + 8)));
+                _acc1 = _mm256_add_ps(
+                    _acc1,
+                    _mm256_mul_ps(load_vec256(a, i + 8), load_vec256(b, i + 8)),
+                );
                 i += 16;
             }
 
@@ -264,9 +335,21 @@ mod simd {
                 i += 8;
             }
 
-            let _acc = _mm256_add_ps(_acc0, _mm256_add_ps(_acc1, _mm256_add_ps(_acc2, _mm256_add_ps(_acc3, _mm256_add_ps(_acc4, _mm256_add_ps(_acc5, _mm256_add_ps(_acc6, _acc7)))))));
+            let _acc = _mm256_add_ps(
+                _acc0,
+                _mm256_add_ps(
+                    _acc1,
+                    _mm256_add_ps(
+                        _acc2,
+                        _mm256_add_ps(
+                            _acc3,
+                            _mm256_add_ps(_acc4, _mm256_add_ps(_acc5, _mm256_add_ps(_acc6, _acc7))),
+                        ),
+                    ),
+                ),
+            );
             let mut sum = horizontal_sum(_acc);
-            
+
             while i < _len {
                 sum += a[i] * b[i];
                 i += 1;
@@ -283,6 +366,8 @@ mod scalar {
     }
 }
 
+// TODO
+// Move testing to separate module
 
 #[cfg(test)]
 mod tests {
@@ -290,9 +375,7 @@ mod tests {
 
     #[test]
     fn test_dot_f32_matches_scalar_2acc() {
-        let _lenghts = [
-            1, 7, 8, 9, 15, 16, 17, 24, 100, 1005
-        ];
+        let _lenghts = [1, 7, 8, 9, 15, 16, 17, 24, 100, 1005];
         for len in _lenghts {
             let a: Vec<f32> = (0..len).map(|i| (i as f32 * 13.0 % 7.0) - 3.5).collect();
             let b: Vec<f32> = (0..len).map(|i| (i as f32 * 14.0 % 8.0) - 1.5).collect();
@@ -306,9 +389,7 @@ mod tests {
 
     #[test]
     fn test_dot_f32_matches_scalar_4acc() {
-        let _lenghts = [
-            1, 7, 8, 9, 15, 16, 17, 24, 100, 1005
-        ];
+        let _lenghts = [1, 7, 8, 9, 15, 16, 17, 24, 100, 1005];
         for len in _lenghts {
             let a: Vec<f32> = (0..len).map(|i| (i as f32 * 13.0 % 7.0) - 3.5).collect();
             let b: Vec<f32> = (0..len).map(|i| (i as f32 * 14.0 % 8.0) - 1.5).collect();
@@ -320,12 +401,9 @@ mod tests {
         }
     }
 
-
     #[test]
     fn test_dot_f32_matches_scalar_6acc() {
-        let _lenghts = [
-            1, 7, 8, 9, 15, 16, 17, 24, 100, 1005
-        ];
+        let _lenghts = [1, 7, 8, 9, 15, 16, 17, 24, 100, 1005];
         for len in _lenghts {
             let a: Vec<f32> = (0..len).map(|i| (i as f32 * 13.0 % 7.0) - 3.5).collect();
             let b: Vec<f32> = (0..len).map(|i| (i as f32 * 14.0 % 8.0) - 1.5).collect();
@@ -334,14 +412,12 @@ mod tests {
             let actual = simd::dot_f32_6acc(&a, &b);
 
             assert!((expected - actual).abs() < 1e-2);
-        } 
+        }
     }
 
     #[test]
     fn test_dot_f32_matches_scalar_8acc() {
-        let _lenghts = [
-            1, 7, 8, 9, 15, 16, 17, 24, 100, 1005
-        ];
+        let _lenghts = [1, 7, 8, 9, 15, 16, 17, 24, 100, 1005];
         for len in _lenghts {
             let a: Vec<f32> = (0..len).map(|i| (i as f32 * 13.0 % 7.0) - 3.5).collect();
             let b: Vec<f32> = (0..len).map(|i| (i as f32 * 14.0 % 8.0) - 1.5).collect();
@@ -353,7 +429,7 @@ mod tests {
         }
     }
 
-    // testing this is an absurb idea but here am i 
+    // testing this is an absurb idea but here am i
     #[test]
     fn test_horizontal_sum() {
         if is_x86_feature_detected!("avx2") {
@@ -361,11 +437,48 @@ mod tests {
             unsafe {
                 let data: [f32; 8] = [1.1, 2.2, 3.3, 4.4, 5.5, 6.6, 7.7, 8.8];
                 let vec = _mm256_loadu_ps(data.as_ptr());
-                
+
                 let expected: f32 = data.iter().sum();
                 let actual = simd::horizontal_sum(vec);
 
                 assert!((expected - actual).abs() < 1e-4);
+            }
+        }
+    }
+
+    #[test]
+    fn test_mkl_sgemm_matches_dot_f32_8acc() {
+        use crate::blas::mkl_blas;
+
+        let dim = 16;
+        let m = 3;
+        let n = 2;
+
+        let a: Vec<f32> = (0..m * dim)
+            .map(|i| (i as f32 * 13.0 % 7.0) - 3.5)
+            .collect();
+        let b: Vec<f32> = (0..n * dim)
+            .map(|i| (i as f32 * 14.0 % 8.0) - 1.5)
+            .collect();
+
+        let mut c = vec![0.0f32; m * n];
+        unsafe {
+            mkl_blas::sgemm(
+                b'T', b'N', m as i32, n as i32, dim as i32, 1.0, &a, dim as i32, &b, dim as i32,
+                0.0, &mut c, m as i32,
+            );
+        }
+
+        for j in 0..n {
+            for i in 0..m {
+                let a_vec = &a[i * dim..i * dim + dim];
+                let b_vec = &b[j * dim..j * dim + dim];
+                let expected = simd::dot_f32_8acc(a_vec, b_vec);
+                let actual = c[j * m + i];
+                assert!(
+                    (expected - actual).abs() < 1e-2,
+                    "mismatch at ({i},{j}): {expected} vs {actual}"
+                );
             }
         }
     }

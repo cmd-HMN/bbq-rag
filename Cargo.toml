@@ -21,10 +21,20 @@ pyo3 = "0.29.0"
 pulp = "0.22.3"
 rayon   = "1.10"
 numpy   = "0.29"
-blas    = "0.23"
 pyo3-stub-gen = "0.23.0"
-libc    = "0.2"
+intel-mkl-src = { version = "0.8.1", features = ["mkl-static-lp64-seq"] }
+libc = "0.2"
+raw-cpuid = "11"
 
 [[bin]]
 name = "stub"
 path = "rust-core/_bin/stub.rs"
+
+[features]
+default = ["fallback-simd"]
+fallback-simd = []
+
+[dev-dependencies]
+criterion = "0.5"
+approx = "0.5"
+
