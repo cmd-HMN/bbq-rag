@@ -156,7 +156,6 @@ mod custom {
             for _j in 0.._m {
                 let base_idx = _i * _m + _j * _kernel;
                 for _k in 0..mr {
-                    // Column-major source: j * lda + i + ii
                     _result[base_idx + _k] = _a[_j * _lda + _i + _k];
                 }
                 // Add the padding
@@ -190,7 +189,7 @@ mod custom {
         for _j in (0.._m).step_by(_kernel) {
             let nr = (_j + _kernel).min(_m) - _j;
             for _i in 0.._k {
-                let base_idx = _j * _m + _i * _kernel;
+                let base_idx = _j * _k + _i * _kernel;
                 for _ii in 0..nr {
                     _result[base_idx + _ii] = _b[(_j + _ii) * _ldb + _i];
                 }
@@ -228,7 +227,7 @@ mod custom {
                 let base_idx = _j * _k + _i * _kernel;
                 for _ii in 0..nr {
                     // Column-major source: (j + jj) * ldb + i
-                    _result[base_idx + _ii] = _b[(_j + _ii) * _ldb + _i];
+                    _result[base_idx + _ii] = _b[(_j + _ii) + _ldb * _i];
                 }
                 // Add the padding
                 for _ii in nr.._kernel {
@@ -273,27 +272,27 @@ mod custom {
                 let _b0 = _mm256_loadu_ps(_b.as_ptr().add(p * NR));
                 let _b1 = _mm256_loadu_ps(_b.as_ptr().add(p * NR + 8));
 
-                let _a0 = _mm256_broadcast_ss(_a.get_unchecked(p * NR));
+                let _a0 = _mm256_broadcast_ss(_a.get_unchecked(p * MR));
                 _c0 = _mm256_fmadd_ps(_a0, _b0, _c0);
                 _c1 = _mm256_fmadd_ps(_a0, _b1, _c1);
 
-                let _a1 = _mm256_broadcast_ss(_a.get_unchecked(p * NR + 1));
+                let _a1 = _mm256_broadcast_ss(_a.get_unchecked(p * MR + 1));
                 _c2 = _mm256_fmadd_ps(_a1, _b0, _c2);
                 _c3 = _mm256_fmadd_ps(_a1, _b1, _c3);
 
-                let _a2 = _mm256_broadcast_ss(_a.get_unchecked(p * NR + 2));
+                let _a2 = _mm256_broadcast_ss(_a.get_unchecked(p * MR + 2));
                 _c4 = _mm256_fmadd_ps(_a2, _b0, _c4);
                 _c5 = _mm256_fmadd_ps(_a2, _b1, _c5);
 
-                let _a3 = _mm256_broadcast_ss(_a.get_unchecked(p * NR + 3));
+                let _a3 = _mm256_broadcast_ss(_a.get_unchecked(p * MR + 3));
                 _c6 = _mm256_fmadd_ps(_a3, _b0, _c6);
                 _c7 = _mm256_fmadd_ps(_a3, _b1, _c7);
 
-                let _a4 = _mm256_broadcast_ss(_a.get_unchecked(p * NR + 4));
+                let _a4 = _mm256_broadcast_ss(_a.get_unchecked(p * MR + 4));
                 _c8 = _mm256_fmadd_ps(_a4, _b0, _c8);
                 _c9 = _mm256_fmadd_ps(_a4, _b1, _c9);
 
-                let _a5 = _mm256_broadcast_ss(_a.get_unchecked(p * NR + 5));
+                let _a5 = _mm256_broadcast_ss(_a.get_unchecked(p * MR + 5));
                 _c10 = _mm256_fmadd_ps(_a5, _b0, _c10);
                 _c11 = _mm256_fmadd_ps(_a5, _b1, _c11);
             }
@@ -314,6 +313,7 @@ mod custom {
         }
     }
 
+    #[inline(always)]
     unsafe fn update_c(
         _mr: usize,
         _nr: usize,
@@ -321,36 +321,33 @@ mod custom {
         _beta: f32,
         _c: &mut [f32],
         _ldc: usize,
-        _c_pack: &mut [f32],
+        _c_pack: &[f32],
     ) {
         if _beta == 0.0 {
-            for _j in 0.._mr {
-                for _k in 0.._nr {
-                    _c_pack[_j * _ldc + _k] = _alpha * _c[_k * NR + _j];
+            for _j in 0.._nr {
+                for _i in 0.._mr {
+                    _c[_j * _ldc + _i] = _alpha * _c_pack[_i * NR + _j];
                 }
             }
-        } else if _beta != 1.0 {
-            for _j in 0.._mr {
-                for _k in 0.._nr {
-                    _c_pack[_j * _ldc + _k] += _alpha * _c[_k * NR + _j];
+        } else if _beta == 1.0 {
+            for _j in 0.._nr {
+                for _i in 0.._mr {
+                    _c[_j * _ldc + _i] += _alpha * _c_pack[_i * NR + _j];
                 }
             }
         } else {
-            for _j in 0.._mr {
-                for _k in 0.._nr {
-                    _c_pack[_j * _ldc + _k] =
-                        _alpha * _c[_k * NR + _j] + _beta * _c_pack[_j * _ldc + _k];
+            for _j in 0.._nr {
+                for _i in 0.._mr {
+                    _c[_j * _ldc + _i] =
+                        _alpha * _c_pack[_i * NR + _j] + _beta * _c[_j * _ldc + _i];
                 }
             }
         }
     }
 
     // As this is only for col pali so only supprt nn and nt format for sgemm
-
     #[inline(always)]
     unsafe fn sgemm_nn_block<const MC: usize, const NC: usize, const KC: usize>(
-        _side: usize,
-        _uplo: usize,
         _m: usize,
         _n: usize,
         _k: usize,
@@ -372,17 +369,18 @@ mod custom {
         for _jnc in (0.._n).step_by(NC) {
             let _nc = (_jnc + NC).min(_n) - _jnc;
 
+            let mut _betam = _beta;
+
             for _pkc in (0.._k).step_by(KC) {
                 let _kc = (_pkc + KC).min(_k) - _pkc;
-
                 // b
                 unsafe {
                     packed_col_b_nr_blocked(
-                        _b,
-                        _k as usize,
-                        _n as usize,
+                        &_b[_pkc + _jnc * (_ldb as usize)..],
+                        _kc as usize,
+                        _nc as usize,
                         _ldb as usize,
-                        NC,
+                        NR,
                         &mut _b_pack,
                     )
                 }
@@ -393,9 +391,9 @@ mod custom {
                     // now a
                     unsafe {
                         packed_col_a_mr_blocked(
-                            _a,
-                            _m as usize,
-                            _k as usize,
+                            &_a[_imc + _pkc * (_lda as usize)..],
+                            _mc as usize,
+                            _kc as usize,
                             _lda as usize,
                             MR,
                             &mut _a_pack,
@@ -410,7 +408,7 @@ mod custom {
 
                             unsafe {
                                 mk_6x16(
-                                    _mr,
+                                    _kc,
                                     &_a_pack[_imr * _kc..],
                                     &_b_pack[_jnr * _kc..],
                                     &mut _c_pack,
@@ -419,7 +417,7 @@ mod custom {
                                     _mr,
                                     _nr,
                                     _alpha,
-                                    _beta,
+                                    _betam,
                                     &mut _c[(_jnc + _jnr) * (_ldc as usize) + (_imc + _imr)..],
                                     _ldc as usize,
                                     &mut _c_pack,
@@ -428,6 +426,92 @@ mod custom {
                         }
                     }
                 }
+                _betam = 1.0;
+            }
+        }
+    }
+
+    #[inline(always)]
+    unsafe fn sgemm_nt_block<const MC: usize, const NC: usize, const KC: usize>(
+        _m: usize,
+        _n: usize,
+        _k: usize,
+        _alpha: f32,
+        _a: &[f32],
+        _lda: u32,
+        _b: &[f32],
+        _ldb: u32,
+        _beta: f32,
+        _c: &mut [f32],
+        _ldc: u32,
+    ) {
+        let mut _a_pack = vec![0.0f32; MC * KC];
+        let mut _b_pack = vec![0.0f32; NC * KC];
+
+        let mut _c_pack = vec![0.0f32; MR * NR];
+
+        // using 5 loop arch
+        for _jnc in (0.._n).step_by(NC) {
+            let _nc = (_jnc + NC).min(_n) - _jnc;
+
+            let mut _betam = _beta;
+
+            for _pkc in (0.._k).step_by(KC) {
+                let _kc = (_pkc + KC).min(_k) - _pkc;
+                // b
+                unsafe {
+                    packed_col_b_transpose_nr_blocked(
+                        &_b[_pkc + _jnc * (_ldb as usize)..],
+                        _kc as usize,
+                        _nc as usize,
+                        _ldb as usize,
+                        NR,
+                        &mut _b_pack,
+                    )
+                }
+
+                for _imc in (0.._m).step_by(MC) {
+                    let _mc = (_imc + MC).min(_m) - _imc;
+
+                    // now a
+                    unsafe {
+                        packed_col_a_mr_blocked(
+                            &_a[_imc + _pkc * (_lda as usize)..],
+                            _mc as usize,
+                            _kc as usize,
+                            _lda as usize,
+                            MR,
+                            &mut _a_pack,
+                        );
+                    }
+
+                    for _jnr in (0.._nc).step_by(NR) {
+                        let _nr = (_jnr + NR).min(_nc) - _jnr;
+
+                        for _imr in (0.._mc).step_by(MR) {
+                            let _mr = (_imr + MR).min(_mc) - _imr;
+
+                            unsafe {
+                                mk_6x16(
+                                    _kc,
+                                    &_a_pack[_imr * _kc..],
+                                    &_b_pack[_jnr * _kc..],
+                                    &mut _c_pack,
+                                );
+                                update_c(
+                                    _mr,
+                                    _nr,
+                                    _alpha,
+                                    _betam,
+                                    &mut _c[(_jnc + _jnr) * (_ldc as usize) + (_imc + _imr)..],
+                                    _ldc as usize,
+                                    &mut _c_pack,
+                                );
+                            }
+                        }
+                    }
+                }
+                _betam = 1.0;
             }
         }
     }
@@ -454,11 +538,11 @@ mod custom {
     /// None
     #[inline(always)]
     pub fn _f32_mm(
-        _side: u8,
-        _uplo: u8,
-        _m: u32,
-        _n: u32,
-        _k: u32,
+        _transa: usize,
+        _transb: usize,
+        _m: usize,
+        _n: usize,
+        _k: usize,
         _alpha: f32,
         _a: &[f32],
         _lda: u32,
@@ -468,5 +552,164 @@ mod custom {
         _c: &mut [f32],
         _ldc: u32,
     ) {
+        assert!(_a.len() >= _lda as usize * _k);
+        assert!(
+            _b.len()
+                >= if _transb == b'N' as usize || _transb == b'n' as usize {
+                    _ldb as usize * _n
+                } else {
+                    _ldb as usize * _k
+                }
+        );
+        assert!(_c.len() >= _ldc as usize * _n);
+
+        if _m == 0 || _n == 0 || ((_alpha == 0.0 || _k == 0) && _beta == 1.0) {
+            return;
+        }
+
+        if _alpha == 0.0 || _k == 0 {
+            unsafe {
+                scale_c(_beta, _m, _n, _c, _ldc as usize);
+                return;
+            }
+        }
+
+        let _notb = _transb as u8 == b'N' || _transb as u8 == b'n';
+
+        unsafe {
+            if _notb {
+                sgemm_nn_block::<72, 256, 256>(
+                    _m, _n, _k, _alpha, _a, _lda, _b, _ldb, _beta, _c, _ldc,
+                )
+            }else
+            {
+                sgemm_nt_block::<72, 256, 256>(
+                    _m, _n, _k, _alpha, _a, _lda, _b, _ldb, _beta, _c, _ldc,
+                )
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn run_sgemm_test(transa: u8, transb: u8, m: usize, n: usize, k: usize, alpha: f32, beta: f32) {
+        let lda = if transa == b'N' || transa == b'n' { m } else { k };
+        let ldb = if transb == b'N' || transb == b'n' { k } else { n };
+        let ldc = m;
+
+        let a: Vec<f32> = (0..m * k).map(|x| x as f32 % 7.0).collect();
+        let b: Vec<f32> = (0..k * n).map(|x| x as f32 % 7.0).collect();
+
+        let mut c_custom: Vec<f32> = (0..m * n).map(|x| x as f32 % 3.0).collect();
+        let mut c_mkl = c_custom.clone();
+        
+        custom::_f32_mm(
+            transa as usize,
+            transb as usize,
+            m,
+            n,
+            k,
+            alpha,
+            &a,
+            lda as u32,
+            &b,
+            ldb as u32,
+            beta,
+            &mut c_custom,
+            ldc as u32,
+        );
+
+        unsafe {
+            mkl_blas::sgemm(
+                transa, transb, m as i32, n as i32, k as i32, alpha, &a, lda as i32, &b, ldb as i32,
+                beta, &mut c_mkl, ldc as i32,
+            );
+        }
+
+        let epsilon = 1e-3;
+
+        for i in 0..(m * n) {
+            let diff = (c_custom[i] - c_mkl[i]).abs();
+            assert!(
+                diff < epsilon,
+                "Mismatch at index {}! Custom: {}, MKL: {} (TransA: {}, TransB: {}, M: {}, N: {}, K: {})",
+                i,
+                c_custom[i],
+                c_mkl[i],
+                transa as char,
+                transb as char,
+                m,
+                n,
+                k
+            );
+        }
+    }
+
+    #[test]
+    fn test_01_standard_square() {
+        run_sgemm_test(b'N', b'N', 256, 256, 256, 1.0, 0.0);
+    }
+
+    #[test]
+    fn test_02_small_micro_kernel_only() {
+        run_sgemm_test(b'N', b'N', 16, 16, 16, 1.0, 0.0);
+    }
+
+    #[test]
+    fn test_03_odd_dimensions_fringe() {
+        run_sgemm_test(b'N', b'N', 17, 19, 23, 1.0, 0.0);
+    }
+
+    #[test]
+    fn test_04_tall_and_skinny() {
+        run_sgemm_test(b'N', b'N', 512, 16, 64, 1.0, 0.0);
+    }
+
+    #[test]
+    fn test_05_short_and_wide() {
+        run_sgemm_test(b'N', b'N', 16, 512, 64, 1.0, 0.0);
+    }
+
+    #[test]
+    fn test_06_deep_k_accumulation() {
+        run_sgemm_test(b'N', b'N', 64, 64, 1024, 1.0, 0.0);
+    }
+
+    #[test]
+    fn test_07_beta_accumulation() {
+        run_sgemm_test(b'N', b'N', 128, 128, 128, 1.0, 1.0);
+    }
+
+    #[test]
+    fn test_08_alpha_beta_fractional_scaling() {
+        run_sgemm_test(b'N', b'N', 64, 64, 64, 0.5, 0.5);
+    }
+
+    #[test]
+    fn test_09_zero_alpha() {
+        run_sgemm_test(b'N', b'N', 128, 128, 128, 0.0, 1.0);
+    }
+
+    #[test]
+    fn test_10_prime_numbers_large() {
+        run_sgemm_test(b'N', b'N', 73, 257, 263, 1.0, 0.0);
+    }
+
+    #[test]
+    fn test_11_nt_standard_square() {
+        run_sgemm_test(b'N', b'T', 128, 128, 128, 1.0, 0.0);
+    }
+
+    #[test]
+    fn test_12_nt_odd_dimensions() {
+        run_sgemm_test(b'N', b'T', 17, 19, 23, 1.0, 0.0);
+    }
+    
+    #[test]
+    fn test_17_nt_tall_and_skinny() {
+        run_sgemm_test(b'N', b'T', 256, 16, 64, 1.0, 0.0);
     }
 }

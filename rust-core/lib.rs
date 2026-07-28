@@ -1,5 +1,4 @@
 // use pyo3::prelude::*;
-pub mod utils;
 pub mod cpu;
 pub mod func;
 pub mod blas;
