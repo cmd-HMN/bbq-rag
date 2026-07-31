@@ -1,5 +1,7 @@
 // Copyright 2024 cmd-HMN
 //
+// This file includes some or all code from the maxsim-cpu library.
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -359,6 +361,12 @@ pub mod simd {
             sum
         }
     }
+
+    #[inline(always)]
+    pub fn max_simd(a: __m256, b: __m256) -> __m256 {
+        unsafe { _mm256_max_ps(a, b) }
+    }
+
 }
 
 mod scalar {
@@ -367,5 +375,3 @@ mod scalar {
     }
 }
 
-// TODO
-// Move testing to separate module

@@ -166,6 +166,30 @@ mod custom {
         }
     }
 
+    #[inline(always)]
+    unsafe fn packed_col_a_transpose_mr_blocked(
+        _a: &[f32],
+        _n: usize,
+        _m: usize,
+        _lda: usize,
+        _kernel: usize, //MR
+        _result: &mut [f32],
+    ) {
+        for _i in (0.._n).step_by(_kernel) {
+            let mr = (_i + _kernel).min(_n) - _i;
+            for _j in 0.._m {
+                let base_idx = _i * _m + _j * _kernel;
+                for _k in 0..mr {
+                    _result[base_idx + _k] = _a[_j + _lda * (_i + _k)];
+                }
+                // Add the padding
+                for _k in mr.._kernel {
+                    _result[base_idx + _k] = 0.0;
+                }
+            }
+        }
+    }
+
     /// packed_col_b_nr_blocked function
     /// # Arguments
     /// * `b` - The second matrix
@@ -461,7 +485,7 @@ mod custom {
                 // b
                 unsafe {
                     packed_col_b_transpose_nr_blocked(
-                        &_b[_pkc + _jnc * (_ldb as usize)..],
+                        &_b[_jnc + _pkc * (_ldb as usize)..],
                         _kc as usize,
                         _nc as usize,
                         _ldb as usize,
@@ -477,6 +501,92 @@ mod custom {
                     unsafe {
                         packed_col_a_mr_blocked(
                             &_a[_imc + _pkc * (_lda as usize)..],
+                            _mc as usize,
+                            _kc as usize,
+                            _lda as usize,
+                            MR,
+                            &mut _a_pack,
+                        );
+                    }
+
+                    for _jnr in (0.._nc).step_by(NR) {
+                        let _nr = (_jnr + NR).min(_nc) - _jnr;
+
+                        for _imr in (0.._mc).step_by(MR) {
+                            let _mr = (_imr + MR).min(_mc) - _imr;
+
+                            unsafe {
+                                mk_6x16(
+                                    _kc,
+                                    &_a_pack[_imr * _kc..],
+                                    &_b_pack[_jnr * _kc..],
+                                    &mut _c_pack,
+                                );
+                                update_c(
+                                    _mr,
+                                    _nr,
+                                    _alpha,
+                                    _betam,
+                                    &mut _c[(_jnc + _jnr) * (_ldc as usize) + (_imc + _imr)..],
+                                    _ldc as usize,
+                                    &mut _c_pack,
+                                );
+                            }
+                        }
+                    }
+                }
+                _betam = 1.0;
+            }
+        }
+    }
+
+    // As this is only for col pali so only supprt nn and nt format for sgemm
+    #[inline(always)]
+    unsafe fn sgemm_tn_block<const MC: usize, const NC: usize, const KC: usize>(
+        _m: usize,
+        _n: usize,
+        _k: usize,
+        _alpha: f32,
+        _a: &[f32],
+        _lda: u32,
+        _b: &[f32],
+        _ldb: u32,
+        _beta: f32,
+        _c: &mut [f32],
+        _ldc: u32,
+    ) {
+        let mut _a_pack = vec![0.0f32; MC * KC];
+        let mut _b_pack = vec![0.0f32; NC * KC];
+
+        let mut _c_pack = vec![0.0f32; MR * NR];
+
+        // using 5 loop arch
+        for _jnc in (0.._n).step_by(NC) {
+            let _nc = (_jnc + NC).min(_n) - _jnc;
+
+            let mut _betam = _beta;
+
+            for _pkc in (0.._k).step_by(KC) {
+                let _kc = (_pkc + KC).min(_k) - _pkc;
+                // b
+                unsafe {
+                    packed_col_b_nr_blocked(
+                        &_b[_pkc + _jnc * (_ldb as usize)..],
+                        _kc as usize,
+                        _nc as usize,
+                        _ldb as usize,
+                        NR,
+                        &mut _b_pack,
+                    )
+                }
+
+                for _imc in (0.._m).step_by(MC) {
+                    let _mc = (_imc + MC).min(_m) - _imc;
+
+                    // now a
+                    unsafe {
+                        packed_col_a_transpose_mr_blocked(
+                            &_a[_pkc + _imc * (_lda as usize)..],
                             _mc as usize,
                             _kc as usize,
                             _lda as usize,
@@ -552,17 +662,26 @@ mod custom {
         _c: &mut [f32],
         _ldc: u32,
     ) {
-        assert!(_a.len() >= _lda as usize * _k);
+        let _nota = _transa as u8 == b'N' || _transa as u8 == b'n';
+        let _notb = _transb as u8 == b'N' || _transb as u8 == b'n';
+
+        assert!(
+            _a.len()
+                >= if _nota {
+                    _lda as usize * _k
+                } else {
+                    _lda as usize * _m
+                }
+        );
         assert!(
             _b.len()
-                >= if _transb == b'N' as usize || _transb == b'n' as usize {
+                >= if _notb {
                     _ldb as usize * _n
                 } else {
                     _ldb as usize * _k
                 }
         );
         assert!(_c.len() >= _ldc as usize * _n);
-
         if _m == 0 || _n == 0 || ((_alpha == 0.0 || _k == 0) && _beta == 1.0) {
             return;
         }
@@ -573,19 +692,18 @@ mod custom {
                 return;
             }
         }
-
-        let _notb = _transb as u8 == b'N' || _transb as u8 == b'n';
-
         unsafe {
-            if _notb {
-                sgemm_nn_block::<72, 256, 256>(
+            match (_nota, _notb) {
+                (true, true) => sgemm_nn_block::<72, 256, 256>(
                     _m, _n, _k, _alpha, _a, _lda, _b, _ldb, _beta, _c, _ldc,
-                )
-            }else
-            {
-                sgemm_nt_block::<72, 256, 256>(
+                ),
+                (true, false) => sgemm_nt_block::<72, 256, 256>(
                     _m, _n, _k, _alpha, _a, _lda, _b, _ldb, _beta, _c, _ldc,
-                )
+                ),
+                (false, true) => sgemm_tn_block::<72, 256, 256>(
+                    _m, _n, _k, _alpha, _a, _lda, _b, _ldb, _beta, _c, _ldc,
+                ),
+                _ => panic!("Unsupported case"),
             }
         }
     }
@@ -596,8 +714,16 @@ mod tests {
     use super::*;
 
     fn run_sgemm_test(transa: u8, transb: u8, m: usize, n: usize, k: usize, alpha: f32, beta: f32) {
-        let lda = if transa == b'N' || transa == b'n' { m } else { k };
-        let ldb = if transb == b'N' || transb == b'n' { k } else { n };
+        let lda = if transa == b'N' || transa == b'n' {
+            m
+        } else {
+            k
+        };
+        let ldb = if transb == b'N' || transb == b'n' {
+            k
+        } else {
+            n
+        };
         let ldc = m;
 
         let a: Vec<f32> = (0..m * k).map(|x| x as f32 % 7.0).collect();
@@ -605,7 +731,7 @@ mod tests {
 
         let mut c_custom: Vec<f32> = (0..m * n).map(|x| x as f32 % 3.0).collect();
         let mut c_mkl = c_custom.clone();
-        
+
         custom::_f32_mm(
             transa as usize,
             transb as usize,
@@ -624,8 +750,8 @@ mod tests {
 
         unsafe {
             mkl_blas::sgemm(
-                transa, transb, m as i32, n as i32, k as i32, alpha, &a, lda as i32, &b, ldb as i32,
-                beta, &mut c_mkl, ldc as i32,
+                transa, transb, m as i32, n as i32, k as i32, alpha, &a, lda as i32, &b,
+                ldb as i32, beta, &mut c_mkl, ldc as i32,
             );
         }
 
@@ -700,16 +826,36 @@ mod tests {
 
     #[test]
     fn test_11_nt_standard_square() {
-        run_sgemm_test(b'N', b'T', 128, 128, 128, 1.0, 0.0);
+        run_sgemm_test(b'n', b't', 128, 128, 128, 1.0, 0.0);
     }
 
     #[test]
     fn test_12_nt_odd_dimensions() {
-        run_sgemm_test(b'N', b'T', 17, 19, 23, 1.0, 0.0);
+        run_sgemm_test(b'n', b't', 17, 19, 23, 1.0, 0.0);
     }
-    
+
     #[test]
-    fn test_17_nt_tall_and_skinny() {
-        run_sgemm_test(b'N', b'T', 256, 16, 64, 1.0, 0.0);
+    fn test_13_nt_tall_and_skinny() {
+        run_sgemm_test(b'n', b't', 256, 16, 64, 1.0, 0.0);
+    }
+
+    #[test]
+    fn test_14_tn_standard_square() {
+        run_sgemm_test(b't', b'n', 128, 128, 128, 1.0, 0.0);
+    }
+
+    #[test]
+    fn test_15_tn_odd_dimensions() {
+        run_sgemm_test(b't', b'n', 17, 19, 23, 1.0, 0.0);
+    }
+
+    #[test]
+    fn test_16_tn_tall_and_skinny() {
+        run_sgemm_test(b't', b'n', 256, 16, 64, 1.0, 0.0);
+    }
+
+    #[test]
+    fn test_17_nt_multiblock_large() {
+        run_sgemm_test(b'n', b't', 64, 512, 320, 1.0, 0.0);
     }
 }
