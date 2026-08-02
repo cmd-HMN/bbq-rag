@@ -17,7 +17,7 @@
 /// Reference
 /// https://www.intel.com/content/www/us/en/docs/onemkl/developer-reference-dpcpp/2023-1/gemm.html
 
-#[cfg(target_arch = "x86_64")]
+#[cfg(all(target_arch = "x86_64", feature = "mkl"))]
 pub mod mkl_blas {
     use libc::c_char;
 
@@ -80,6 +80,7 @@ pub mod mkl_blas {
     }
 }
 
+#[cfg(not(feature = "mkl"))]
 mod custom {
     use std::arch::x86_64::*;
 

@@ -22,13 +22,13 @@ pulp = "0.22.3"
 rayon   = "1.10"
 numpy   = "0.29"
 pyo3-stub-gen = "0.23.0"
-intel-mkl-src = { version = "0.8.1", features = ["mkl-static-lp64-seq"] }
+intel-mkl-src = { version = "0.8.1", optional = true, features = ["mkl-static-lp64-seq"] }
 libc = "0.2"
 raw-cpuid = "11"
 
-[dependencies.intel-mkl-src]
-version = "0.8.1"
-optional = true
+# [dependencies.intel-mkl-src]
+# version = "0.8.1"
+# optional = true
 
 [[bin]]
 name = "stub"
