@@ -26,13 +26,17 @@ intel-mkl-src = { version = "0.8.1", features = ["mkl-static-lp64-seq"] }
 libc = "0.2"
 raw-cpuid = "11"
 
+[dependencies.intel-mkl-src]
+version = "0.8.1"
+optional = true
+
 [[bin]]
 name = "stub"
 path = "rust-core/_bin/stub.rs"
 
 [features]
-default = ["fallback-simd"]
-fallback-simd = []
+default = ["mkl"]
+mkl = ["intel-mkl-src"]
 
 [dev-dependencies]
 criterion = "0.5"
