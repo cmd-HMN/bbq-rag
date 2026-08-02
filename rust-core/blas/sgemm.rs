@@ -649,43 +649,53 @@ pub mod custom {
     /// None
     #[inline(always)]
     pub fn sgemm(
-        _transa: usize,
-        _transb: usize,
-        _m: usize,
-        _n: usize,
-        _k: usize,
+        _side: u8,
+        _uplo: u8,
+        _m: i32,
+        _n: i32,
+        _k: i32,
         _alpha: f32,
         _a: &[f32],
-        _lda: u32,
+        _lda: i32,
         _b: &[f32],
-        _ldb: u32,
+        _ldb: i32,
         _beta: f32,
         _c: &mut [f32],
-        _ldc: u32,
+        _ldc: i32,
     ) {
-        let _nota = _transa as u8 == b'N' || _transa as u8 == b'n';
-        let _notb = _transb as u8 == b'N' || _transb as u8 == b'n';
+        let _nota = _side == b'N' || _side == b'n';
+        let _notb = _uplo == b'N' || _uplo == b'n';
 
         assert!(
             _a.len()
                 >= if _nota {
-                    _lda as usize * _k
+                    (_lda * _k) as usize
                 } else {
-                    _lda as usize * _m
+                    (_lda * _m) as usize
                 }
         );
         assert!(
             _b.len()
                 >= if _notb {
-                    _ldb as usize * _n
+                    (_ldb * _n) as usize
                 } else {
-                    _ldb as usize * _k
+                    (_ldb * _k) as usize
                 }
         );
-        assert!(_c.len() >= _ldc as usize * _n);
+        assert!(_c.len() >= (_ldc * _n) as usize);
         if _m == 0 || _n == 0 || ((_alpha == 0.0 || _k == 0) && _beta == 1.0) {
             return;
         }
+
+        // change the type before passing aint gonna chage the whole code i am lazzzzzy
+    
+        let _m = _m as usize;
+        let _n = _n as usize;
+        let _k = _k as usize;
+
+        let _lda = _lda as u32;
+        let _ldb = _ldb as u32;
+        let _ldc = _ldc as u32;
 
         if _alpha == 0.0 || _k == 0 {
             unsafe {
@@ -734,19 +744,19 @@ mod tests {
         let mut c_mkl = c_custom.clone();
 
         custom::sgemm(
-            transa as usize,
-            transb as usize,
-            m,
-            n,
-            k,
+            transa,
+            transb,
+            m as i32,
+            n as i32,
+            k as i32,
             alpha,
             &a,
-            lda as u32,
+            lda as i32,
             &b,
-            ldb as u32,
+            ldb as i32,
             beta,
             &mut c_custom,
-            ldc as u32,
+            ldc as i32,
         );
 
         unsafe {
