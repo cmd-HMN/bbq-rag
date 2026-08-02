@@ -21,13 +21,15 @@ mod function {
     #[cfg(all(target_arch = "x86_64", feature = "mkl"))]
     use crate::blas::mkl_blas::sgemm;
 
+    #[cfg(not(feature="mkl"))]
+    use crate::blas::custom::sgemm;
+
     thread_local! {
         static BUFFER: RefCell<Vec<f32>> = RefCell::new(Vec::new());
     }
 
     pub fn pro_sgl_doc(_q: &[f32], _d: &[f32], _q_len: usize, _d_len: usize, _dim: usize) -> f32 {
         unsafe {
-            #[cfg(all(target_arch = "x86_64", feature = "mkl"))]
             BUFFER.with(|buffer| {
                 let mut buffer = buffer.borrow_mut();
                 if buffer.len() < _d_len * _q_len {
