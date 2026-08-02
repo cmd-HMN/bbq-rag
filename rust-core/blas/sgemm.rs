@@ -80,8 +80,8 @@ pub mod mkl_blas {
     }
 }
 
-#[cfg(not(feature = "mkl"))]
-mod custom {
+#[cfg(any(not(feature = "mkl"), test))]
+pub mod custom {
     use std::arch::x86_64::*;
 
     /// Kernel Size
@@ -648,7 +648,7 @@ mod custom {
     /// # Returns
     /// None
     #[inline(always)]
-    pub fn _f32_mm(
+    pub fn sgemm(
         _transa: usize,
         _transb: usize,
         _m: usize,
@@ -733,7 +733,7 @@ mod tests {
         let mut c_custom: Vec<f32> = (0..m * n).map(|x| x as f32 % 3.0).collect();
         let mut c_mkl = c_custom.clone();
 
-        custom::_f32_mm(
+        custom::sgemm(
             transa as usize,
             transb as usize,
             m,
@@ -776,87 +776,87 @@ mod tests {
     }
 
     #[test]
-    fn test_01_standard_square() {
+    fn test_sgemm_nn_standard_square() {
         run_sgemm_test(b'N', b'N', 256, 256, 256, 1.0, 0.0);
     }
 
     #[test]
-    fn test_02_small_micro_kernel_only() {
+    fn test_sgemm_nn_small_micro_kernel_only() {
         run_sgemm_test(b'N', b'N', 16, 16, 16, 1.0, 0.0);
     }
 
     #[test]
-    fn test_03_odd_dimensions_fringe() {
+    fn test_sgemm_nn_odd_dimensions_fringe() {
         run_sgemm_test(b'N', b'N', 17, 19, 23, 1.0, 0.0);
     }
 
     #[test]
-    fn test_04_tall_and_skinny() {
+    fn test_sgemm_nn_tall_and_skinny() {
         run_sgemm_test(b'N', b'N', 512, 16, 64, 1.0, 0.0);
     }
 
     #[test]
-    fn test_05_short_and_wide() {
+    fn test_sgemm_nn_short_and_wide() {
         run_sgemm_test(b'N', b'N', 16, 512, 64, 1.0, 0.0);
     }
 
     #[test]
-    fn test_06_deep_k_accumulation() {
+    fn test_sgemm_nn_deep_k_accumulation() {
         run_sgemm_test(b'N', b'N', 64, 64, 1024, 1.0, 0.0);
     }
 
     #[test]
-    fn test_07_beta_accumulation() {
+    fn test_sgemm_nn_beta_accumulation() {
         run_sgemm_test(b'N', b'N', 128, 128, 128, 1.0, 1.0);
     }
 
     #[test]
-    fn test_08_alpha_beta_fractional_scaling() {
+    fn test_sgemm_nn_alpha_beta_fractional_scaling() {
         run_sgemm_test(b'N', b'N', 64, 64, 64, 0.5, 0.5);
     }
 
     #[test]
-    fn test_09_zero_alpha() {
+    fn test_sgemm_nn_zero_alpha() {
         run_sgemm_test(b'N', b'N', 128, 128, 128, 0.0, 1.0);
     }
 
     #[test]
-    fn test_10_prime_numbers_large() {
+    fn test_sgemm_nn_prime_numbers_large() {
         run_sgemm_test(b'N', b'N', 73, 257, 263, 1.0, 0.0);
     }
 
     #[test]
-    fn test_11_nt_standard_square() {
+    fn test_sgemm_nt_standard_square() {
         run_sgemm_test(b'n', b't', 128, 128, 128, 1.0, 0.0);
     }
 
     #[test]
-    fn test_12_nt_odd_dimensions() {
+    fn test_sgemm_nt_odd_dimensions() {
         run_sgemm_test(b'n', b't', 17, 19, 23, 1.0, 0.0);
     }
 
     #[test]
-    fn test_13_nt_tall_and_skinny() {
+    fn test_sgemm_nt_tall_and_skinny() {
         run_sgemm_test(b'n', b't', 256, 16, 64, 1.0, 0.0);
     }
 
     #[test]
-    fn test_14_tn_standard_square() {
+    fn test_sgemm_tn_standard_square() {
         run_sgemm_test(b't', b'n', 128, 128, 128, 1.0, 0.0);
     }
 
     #[test]
-    fn test_15_tn_odd_dimensions() {
+    fn test_sgemm_tn_odd_dimensions() {
         run_sgemm_test(b't', b'n', 17, 19, 23, 1.0, 0.0);
     }
 
     #[test]
-    fn test_16_tn_tall_and_skinny() {
+    fn test_sgemm_tn_tall_and_skinny() {
         run_sgemm_test(b't', b'n', 256, 16, 64, 1.0, 0.0);
     }
 
     #[test]
-    fn test_17_nt_multiblock_large() {
+    fn test_sgemm_nt_multiblock_large() {
         run_sgemm_test(b'n', b't', 64, 512, 320, 1.0, 0.0);
     }
 }
