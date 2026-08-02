@@ -114,15 +114,13 @@ pub mod simd {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn max_scalar(a: &[f32]) -> f32 {
-    a.iter().copied().fold(f32::NEG_INFINITY, f32::max)
-}
-
+        a.iter().copied().fold(f32::NEG_INFINITY, f32::max)
+    }
 
     fn assert_max_eq(input: &[f32]) {
         let expected = max_scalar(input);
@@ -135,77 +133,66 @@ mod tests {
     }
 
     #[test]
-    fn empty_slice() {
+    fn test_vec256_empty_slice() {
         assert_max_eq(&[]);
     }
 
     #[test]
-    fn single_element() {
+    fn test_vec256_single_element() {
         assert_max_eq(&[42.0]);
         assert_max_eq(&[-3.14]);
     }
 
     #[test]
-    fn two_elements() {
+    fn test_vec256_two_elements() {
         assert_max_eq(&[1.0, 2.0]);
         assert_max_eq(&[2.0, 1.0]);
     }
 
     #[test]
-    fn all_same() {
+    fn test_vec256_all_same() {
         assert_max_eq(&[5.0; 100]);
     }
 
     #[test]
-    fn strictly_increasing() {
+    fn test_vec256_strictly_increasing() {
         let v: Vec<f32> = (0..100).map(|i| i as f32).collect();
         assert_max_eq(&v);
     }
 
     #[test]
-    fn strictly_decreasing() {
+    fn test_vec256_strictly_decreasing() {
         let v: Vec<f32> = (0..100).map(|i| 99.0 - i as f32).collect();
         assert_max_eq(&v);
     }
 
     #[test]
-    fn negatives_and_positives() {
+    fn test_vec256_negatives_and_positives() {
         assert_max_eq(&[-1.0, -5.0, -2.0, 0.0, -10.0]);
         assert_max_eq(&[-100.0, 100.0, -50.0, 50.0]);
     }
 
     #[test]
-    fn around_alignment_boundaries() {
-        // 1..40 covers every possible misalignment mod 32
+    fn test_vec256_around_alignment_boundaries() {
         for len in 1..=40 {
             let v: Vec<f32> = (0..len).map(|i| (len - i) as f32).collect();
             assert_max_eq(&v);
         }
     }
 
-    // #[test]
-    // fn large_random() {
-    //     use rand::Rng;
-    //     let mut rng = rand::thread_rng();
-    //     for _ in 0..10 {
-    //         let v: Vec<f32> = (0..10_000).map(|_| rng.gen::<f32>()).collect();
-    //         assert_max_eq(&v);
-    //     }
-    // }
-
     #[test]
-    fn contains_neg_inf() {
+    fn test_vec256_contains_neg_inf() {
         assert_max_eq(&[f32::NEG_INFINITY, 1.0, 2.0]);
         assert_max_eq(&[f32::NEG_INFINITY; 50]);
     }
 
     #[test]
-    fn contains_infinity() {
+    fn test_vec256_contains_infinity() {
         assert_max_eq(&[1.0, f32::INFINITY, 2.0]);
     }
 
     #[test]
-    fn contains_nan() {
+    fn test_vec256_contains_nan() {
         let expected = max_scalar(&[f32::NAN, 1.0, 2.0]);
         let got = simd::max_avx2(&[f32::NAN, 1.0, 2.0]);
         assert_eq!(got.is_nan(), expected.is_nan(), "NaN handling mismatch");
