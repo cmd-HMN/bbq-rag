@@ -1,52 +1,31 @@
-/// Contain all the function to be used in the project
+// Copyright 2024 cmd-HMN
+//
+// This file includes some or all code from the maxsim-cpu library.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 mod function {
     use crate::cpu::vec256::simd;
-    //
-    // /// Dot product
-    // /// Simd based dot product for the f32 type
-    // /// # Type Parameters
-    // ///
-    // /// * `T` - The size of the vector - can be 2, 4, 6 or 8
-    // ///
-    // /// # Arguments
-    // ///
-    // /// * `a` - A slice of f32
-    // /// * `b` - A slice of f32
-    // /// # Returns
-    // /// A f32 dot product 
-    // /// 
-    // /// # Panics
-    // /// Panics if the size of the vector is not 2, 4, 6 or 8
-    // pub fn dot_f32<const T: usize>(a: &[f32], b: &[f32]) -> f32 {
-    //     match T {
-    //         2 => simd::dot_f32_2acc(a, b),
-    //         4 => simd::dot_f32_4acc(a, b),
-    //         6 => simd::dot_f32_6acc(a, b),
-    //         8 => simd::dot_f32_8acc(a, b),
-    //         _ => panic!("Unsupported vector size, Only support 2, 4, 6 or 8")
-    //     }
-    // }
-    //
-    // /// Norm Squared
-    // /// # Type Parameters
-    // /// 
-    // /// * `T` - The size of the vector - can be 2, 4, 6 or 8
-    // /// 
-    // /// # Arguments
-    // /// 
-    // /// * `a` - A slice of f32
-    // /// # Returns
-    // /// A f32 norm squared
-    // ///
-    // /// # Panics
-    // /// Panics if the size of the vector is not 2, 4, 6 or 8
-    // ///
-    // /// # Calls
-    // /// * `dot_f32`
-    // pub fn norm_sq_f32<const T: usize>(a: &[f32]) -> f32 {
-    //     dot_f32::<T>(a, a)
-    // }
-    //
+    use crate::blas::*;
 
+    pub fn pro_sgl_doc(
+        _q : &[f32],
+        _d : &[f32],
+        _q_len: usize,
+        _d_len: usize,
+        _dim: usize
+    ) -> f32 {
+        unsafe {
+        }
+    }
 }
