@@ -38,7 +38,7 @@ mod function {
                     b'T',
                     b'N',
                     _d_len as i32,
-                    _q_len as i31,
+                    _q_len as i32,
                     _dim as i32,
                     1.0,
                     _d,
