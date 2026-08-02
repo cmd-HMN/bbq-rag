@@ -15,17 +15,50 @@
 // limitations under the License.
 
 mod function {
-    use crate::cpu::vec256::simd;
-    use crate::blas::*;
+    use std::cell::RefCell;
+    use crate::cpu::vec256::simd::max_avx2;
 
-    pub fn pro_sgl_doc(
-        _q : &[f32],
-        _d : &[f32],
-        _q_len: usize,
-        _d_len: usize,
-        _dim: usize
-    ) -> f32 {
+    #[cfg(all(target_arch = "x86_64", feature = "mkl"))]
+    use crate::blas::mkl_blas::sgemm;
+
+    thread_local! {
+        static BUFFER: RefCell<Vec<f32>> = RefCell::new(Vec::new());
+    }
+
+    pub fn pro_sgl_doc(_q: &[f32], _d: &[f32], _q_len: usize, _d_len: usize, _dim: usize) -> f32 {
         unsafe {
+            #[cfg(all(target_arch = "x86_64", feature = "mkl"))]
+            BUFFER.with(|buffer| {
+                let mut buffer = buffer.borrow_mut();
+                if buffer.len() < _d_len * _q_len {
+                    buffer.resize(_d_len * _q_len, 0.0);
+                }
+
+                sgemm(
+                    b'T',
+                    b'N',
+                    _d_len as i32,
+                    _q_len as i31,
+                    _dim as i32,
+                    1.0,
+                    _d,
+                    _dim as i32,
+                    _q,
+                    _dim as i32,
+                    0.0,
+                    buffer.as_mut_slice(),
+                    _d_len as i32,
+                );
+
+                let mut score = 0.0f32;
+                for i in 0.._d_len {
+                    let start = i * _d_len;
+                    let query_sims = &buffer[start..start + _d_len];
+                    score += max_avx2(query_sims);
+                }
+
+                score
+            })
         }
     }
 }
