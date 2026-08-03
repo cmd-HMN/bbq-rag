@@ -760,6 +760,7 @@ mod tests {
         );
 
         unsafe {
+            #[cfg(feature = "mkl")]
             mkl_blas::sgemm(
                 transa, transb, m as i32, n as i32, k as i32, alpha, &a, lda as i32, &b,
                 ldb as i32, beta, &mut c_mkl, ldc as i32,
