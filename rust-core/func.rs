@@ -15,16 +15,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-mod function {
+pub mod function {
     use crate::cpu::vec256::simd::max_avx2;
     use rayon::prelude::*;
     use std::cell::RefCell;
 
-    #[cfg(all(target_arch = "x86_64", feature = "mkl"))]
-    use crate::blas::mkl_blas::sgemm;
+    use crate::blas::custom::sgemm as csgemm;
 
-    #[cfg(not(feature = "mkl"))]
-    use crate::blas::custom::sgemm;
+    #[cfg(all(target_arch = "x86_64", feature = "mkl"))]
+    use crate::blas::mkl_blas::sgemm as msgemm;
 
     thread_local! {
         static BUFFER: RefCell<Vec<f32>> = RefCell::new(Vec::new());
@@ -33,8 +32,17 @@ mod function {
                                                                                            // buffer
     }
 
-    pub fn pro_sgl_doc(_q: &[f32], _d: &[f32], _q_len: usize, _d_len: usize, _dim: usize) -> f32 {
-        unsafe {
+    pub fn generic_gpro_sgl_doc<F>(
+        _q: &[f32],
+        _d: &[f32],
+        _q_len: usize,
+        _d_len: usize,
+        _dim: usize,
+        sgemm: F,
+    ) -> f32
+    where
+        F: Fn(u8, u8, i32, i32, i32, f32, &[f32], i32, &[f32], i32, f32, &mut [f32], i32),
+    {
             BUFFER.with(|buffer| {
                 let mut buffer = buffer.borrow_mut();
                 if buffer.len() < _d_len * _q_len {
@@ -66,9 +74,79 @@ mod function {
 
                 score
             })
+    }
+
+    pub fn pro_sgl_doc(_q: &[f32], _d: &[f32], _q_len: usize, _d_len: usize, _dim: usize) -> f32 {
+        #[cfg(all(target_arch = "x86_64", feature = "mkl"))]
+        {
+            return generic_gpro_sgl_doc(
+                _q,
+                _d,
+                _q_len,
+                _d_len,
+                _dim,
+                |transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc| unsafe {
+                    msgemm(transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc)
+                },
+            );
+        }
+
+        #[cfg(not(all(target_arch = "x86_64", feature = "mkl")))]
+        {
+            return generic_gpro_sgl_doc(
+                _q,
+                _d,
+                _q_len,
+                _d_len,
+                _dim,
+                |transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc| {
+                    unsafe { csgemm(transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc) }
+                },
+            );
         }
     }
 
+    pub mod internal {
+        use crate::func::function::{generic_gpro_sgl_doc, csgemm, msgemm};
+
+        pub fn pro_sgl_doc_csgemm(
+            _q: &[f32],
+            _d: &[f32],
+            _q_len: usize,
+            _d_len: usize,
+            _dim: usize,
+        ) -> f32{
+            generic_gpro_sgl_doc(
+                _q,
+                _d,
+                _q_len,
+                _d_len,
+                _dim,
+                |transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc| unsafe {
+                    csgemm(transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc)
+                },
+                )
+        }
+
+        pub fn pro_sgl_doc_msgemm(
+            _q: &[f32],
+            _d: &[f32],
+            _q_len: usize,
+            _d_len: usize,
+            _dim: usize,
+        ) -> f32{
+            generic_gpro_sgl_doc(
+                _q,
+                _d,
+                _q_len,
+                _d_len,
+                _dim,
+                |transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc| unsafe {
+                    msgemm(transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc)
+                },
+                )
+        }
+    }
     #[inline(always)]
     fn pro_bth(
         _q: &[f32],
@@ -140,7 +218,7 @@ mod function {
             let tile_d = &_d[tile_d_start..tile_d_end];
 
             unsafe {
-                sgemm(
+                csgemm(
                     b'T',
                     b'N',
                     _tile_tokens as i32,
@@ -276,7 +354,7 @@ mod function {
 mod tests {
     use crate::func::function::maxsim_variable_length;
 
-use super::*;
+    use super::*;
 
     fn pro_sgl_doc(_q: &[f32], _d: &[f32], _q_len: usize, _d_len: usize, _dim: usize) -> f32 {
         let mut score = 0.0f32;
@@ -525,7 +603,7 @@ use super::*;
 
         let doc_length = 15;
         let backing_data: Vec<Vec<f32>> = (0..35).map(|_| vec![1.0; doc_length * dim]).collect();
-        
+
         let mut d = Vec::new();
         for (i, data) in backing_data.iter().enumerate() {
             d.push((i, doc_length, data.as_slice()));
@@ -544,7 +622,7 @@ use super::*;
 
         let min_len = 20;
         let max_len = 23; // 23 / 20 = 1.15 (which is <= 1.2)
-        
+
         let mut backing_data = Vec::new();
         for i in 0..55 {
             let len = if i % 2 == 0 { min_len } else { max_len };

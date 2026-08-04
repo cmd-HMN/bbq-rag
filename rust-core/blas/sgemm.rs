@@ -80,7 +80,6 @@ pub mod mkl_blas {
     }
 }
 
-#[cfg(any(not(feature = "mkl"), test))]
 pub mod custom {
     use std::arch::x86_64::*;
 

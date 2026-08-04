@@ -42,3 +42,7 @@ mkl = ["intel-mkl-src"]
 criterion = "0.5"
 approx = "0.5"
 
+[[bench]]
+name = "bench"
+harness = false
+path = "rust-core/benches/bench.rs"
