@@ -1,7 +1,9 @@
 import maxsimd
 import numpy as np
 
-a = np.array([1.0, 2.0, 3.0], dtype=np.float32)
-b = np.array([4.0, 5.0, 6.0], dtype=np.float32)
+dim, q_len, doc_lengths = 4, 2, [3, 2]
+q = np.random.rand(q_len * dim).astype(np.float32)
+d = np.random.rand(sum(doc_lengths) * dim).astype(np.float32)
 
-print(maxsimd.dot_f32(a, b))
+result = maxsimd.maxsim_vrlen(q, d, doc_lengths, q_len, dim)
+print(f"Success!\n{result}\nType: {type(result)}")

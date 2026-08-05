@@ -4,9 +4,10 @@
 import builtins
 import numpy
 import numpy.typing
+import typing
 __all__ = [
-    "dot_f32",
+    "maxsim_vrlen",
 ]
 
-def dot_f32(a: numpy.typing.NDArray[numpy.float32], b: numpy.typing.NDArray[numpy.float32]) -> builtins.float: ...
+def maxsim_vrlen(q: numpy.typing.NDArray[numpy.float32], d: numpy.typing.NDArray[numpy.float32], doc_lengths: typing.Sequence[builtins.int], q_len: builtins.int, dim: builtins.int) -> builtins.list[builtins.float]: ...
 
