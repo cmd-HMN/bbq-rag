@@ -26,6 +26,12 @@ class CIdeficsModel(Idefics3PreTrainedModel, BaseModel):
         >>> config = load_configuration_from_yaml_file("config.yaml")
         >>> model = CIdeficsModel(config)
     """
+
+    @classmethod
+    def supports_model(cls, base_model_id: str) -> bool:
+        model_id_lower = base_model_id.lower()
+        return "idefics" in model_id_lower or "smolvlm" in model_id_lower
+
     def __init__(self, config: Any) -> None:
         config = sanitize_invalid_model_pad_token_id(config)
         super(CIdeficsModel, self).__init__(config)

@@ -1,10 +1,19 @@
 from abc import ABC, abstractmethod
 from typing import Tuple, List, Any, Mapping
+from transformers import PreTrainedModel
 
-class BaseModel(ABC):
+class BaseModel(PreTrainedModel, ABC):
     """
     Abstract base class for models in BBQ RAG.
     """
+    @classmethod
+    @abstractmethod
+    def supports_model(cls, base_model_id: str) -> bool:
+        """
+        Check if this model class supports the given base model ID.
+        """
+        pass
+
     @abstractmethod
     def forward(self, *args: Any, **kwargs: Any) -> Any:
         """
@@ -20,7 +29,7 @@ class BaseModelLoader(ABC):
     ) -> Tuple[Any, Any]:
         pass
 
-class BaseProcessor(ABC):
+class BaseProcessor(ABC, PreTrainedModel):
     @abstractmethod
     def process_images(
         self, images: List[Any], **kwargs: Any

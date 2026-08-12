@@ -2,15 +2,10 @@ from typing import Any, List, Optional, Tuple, Type, Union
 
 from peft import PeftConfig, PeftModel
 import torch
-from transformers import Idefics3Config
 from transformers import logging as tf_logging
 
 from bbq.src.common.base import BaseEngineWrapper, BaseModel, BaseModelLoader, BaseProcessor
-from bbq.src.models.idefics3.imodel import (
-    CIdeficsModel,
-    sanitize_invalid_model_pad_token_id,
-)
-from bbq.src.models.idefics3.iprocess import CIdeficsProcessor
+from bbq.src.models.registry import ModelRegistry
 from bbq.src.utils.config import (
     ModelConfigWrapper,
     determine_target_torch_device,
@@ -18,7 +13,6 @@ from bbq.src.utils.config import (
     resolve_torch_data_type,
 )
 from bbq.src.utils.errors import (
-    BaseModelConfigLoadError,
     BaseModelInstantiateError,
     LoRAAdapterLoadError,
     ProcessorLoadError,
@@ -33,13 +27,13 @@ class EngineModelLoader(BaseModelLoader):
     @classmethod
     def load_model_and_processor(
         cls, config_input: Any
-    ) -> Tuple[Union[CIdeficsModel, PeftModel], CIdeficsProcessor]:
+    ) -> Tuple[Union[BaseModel, PeftModel], BaseProcessor]:
         return cls.load_model_with_lora_adapters(config_input)
 
     @staticmethod
     def load_model_with_lora_adapters(
         config_input: Union[str, ModelConfigWrapper],
-    ) -> Tuple[Union[CIdeficsModel, PeftModel], CIdeficsProcessor]:
+    ) -> Tuple[Union[BaseModel, PeftModel], BaseProcessor]:
         """
         Loads a model with LoRA adapters
 
@@ -47,7 +41,7 @@ class EngineModelLoader(BaseModelLoader):
             config_input (Union[str, ModelConfigWrapper]): Model configuration
 
         Returns:
-            Tuple[Union[CIdeficsModel, PeftModel], CIdeficsProcessor]: Loaded model and processor
+            Tuple[Union[BaseModel, PeftModel], BaseProcessor]: Loaded model and processor
         """
         tf_logging.set_verbosity_error()
 
@@ -59,23 +53,16 @@ class EngineModelLoader(BaseModelLoader):
         target_device = determine_target_torch_device(config.device)
         resolved_dtype: torch.dtype = resolve_torch_data_type(config.torch_dtype, target_device)
 
-        
-        try:
-            base_model_config: Idefics3Config = Idefics3Config.from_pretrained(config.base_model_id)
-            base_model_config = sanitize_invalid_model_pad_token_id(base_model_config)
-        except Exception as exception_instance:
-            raise BaseModelConfigLoadError(
-                f"Failed to load explicit base configuration from {config.base_model_id}: {exception_instance}"
-            ) from exception_instance
+        model_cls, processor_cls = ModelRegistry.get_for_model(config.base_model_id)
 
         try:
-            base_model: Any = CIdeficsModel.from_pretrained(
+            base_model: Any = model_cls.from_pretrained(
                 config.base_model_id,
                 torch_dtype=resolved_dtype,
             )
         except Exception as exception_instance:
             raise BaseModelInstantiateError(
-                f"Failed to instantiate base CIdeficsModel from {config.base_model_id}: {exception_instance}"
+                f"Failed to instantiate base {model_cls.__name__} from {config.base_model_id}: {exception_instance}"
             ) from exception_instance
 
         model_to_use: Union[Any, PeftModel] = base_model
@@ -96,10 +83,10 @@ class EngineModelLoader(BaseModelLoader):
         model_to_use = model_to_use.to(target_device).eval()
 
         try:
-            processor: CIdeficsProcessor = CIdeficsProcessor.from_pretrained(config.base_model_id)
+            processor: BaseProcessor = processor_cls.from_pretrained(config.base_model_id)
         except Exception:
             try:
-                processor = CIdeficsProcessor.from_pretrained(config.lora_adapter_id)
+                processor = processor_cls.from_pretrained(config.lora_adapter_id)
             except Exception as exception_instance:
                 raise ProcessorLoadError(
                     f"Failed to load processor from {config.base_model_id} or {config.lora_adapter_id}: {exception_instance}"
