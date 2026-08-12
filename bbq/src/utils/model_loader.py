@@ -1,17 +1,17 @@
-from typing import Any, Dict, List, Optional, Tuple, Type, Union
+from typing import Any, List, Optional, Tuple, Type, Union
 
 from peft import PeftConfig, PeftModel
 import torch
 from transformers import Idefics3Config
 from transformers import logging as tf_logging
 
-from bbq.src.common.base import BaseEngineWrapper, BaseModelLoader, BaseProcessor
+from bbq.src.common.base import BaseEngineWrapper, BaseModel, BaseModelLoader, BaseProcessor
 from bbq.src.models.idefics3.imodel import (
     CIdeficsModel,
     sanitize_invalid_model_pad_token_id,
 )
 from bbq.src.models.idefics3.iprocess import CIdeficsProcessor
-from bbq.src.utils.config_wrapper import (
+from bbq.src.utils.config import (
     ModelConfigWrapper,
     determine_target_torch_device,
     load_configuration_from_yaml_file,
@@ -56,9 +56,10 @@ class EngineModelLoader(BaseModelLoader):
         else:
             config = config_input
 
-        target_device: str = determine_target_torch_device(config.device)
+        target_device = determine_target_torch_device(config.device)
         resolved_dtype: torch.dtype = resolve_torch_data_type(config.torch_dtype, target_device)
 
+        
         try:
             base_model_config: Idefics3Config = Idefics3Config.from_pretrained(config.base_model_id)
             base_model_config = sanitize_invalid_model_pad_token_id(base_model_config)
@@ -68,9 +69,8 @@ class EngineModelLoader(BaseModelLoader):
             ) from exception_instance
 
         try:
-            base_model: CIdeficsModel = CIdeficsModel.from_pretrained(
+            base_model: Any = CIdeficsModel.from_pretrained(
                 config.base_model_id,
-                config=base_model_config,
                 torch_dtype=resolved_dtype,
             )
         except Exception as exception_instance:
@@ -78,7 +78,7 @@ class EngineModelLoader(BaseModelLoader):
                 f"Failed to instantiate base CIdeficsModel from {config.base_model_id}: {exception_instance}"
             ) from exception_instance
 
-        model_to_use: Union[CIdeficsModel, PeftModel] = base_model
+        model_to_use: Union[Any, PeftModel] = base_model
 
         if config.lora_adapter_id:
             try:
@@ -108,59 +108,70 @@ class EngineModelLoader(BaseModelLoader):
         return model_to_use, processor
 
 class EngineWrapper(BaseEngineWrapper):
+
+    """
+    Class for wrapping engine models
+    """
     def __init__(
         self,
-        model: Union[CIdeficsModel, PeftModel, Any],
-        processor: Union[CIdeficsProcessor, BaseProcessor, Any],
+        model: Any,
+        processor: BaseProcessor,
         config: ModelConfigWrapper,
     ) -> None:
-        self.model: Union[CIdeficsModel, PeftModel, Any] = model
-        self.processor: Union[CIdeficsProcessor, BaseProcessor, Any] = processor
+
+        self.model = model
+        self.processor = processor
         self.config: ModelConfigWrapper = config
 
     def encode_multimodal_document_images(self, images: List[Any]) -> torch.Tensor:
+        """
+        Encodes a list of images into embeddings
+        """
         if not images:
             raise ValueError("Input image list cannot be empty.")
-        processed_inputs: Dict[str, Any] = self.processor.process_images(images)
-        target_device: str = next(self.model.parameters()).device
+        
+        processed_inputs = self.processor.process_images(images)
+        target_device = next(self.model.parameters()).device
         processed_inputs = {
             k: v.to(target_device) if isinstance(v, torch.Tensor) else v
             for k, v in processed_inputs.items()
         }
+        
         with torch.inference_mode():
             image_embeddings: torch.Tensor = self.model(**processed_inputs)
+        
         return image_embeddings
 
     def encode_query_text_inputs(self, texts: List[str]) -> torch.Tensor:
+        """
+        Encodes a list of text inputs into embeddings
+        """
         if not texts:
             raise ValueError("Input text list cannot be empty.")
-        processed_inputs: Dict[str, Any] = self.processor.process_texts(texts)
-        target_device: str = next(self.model.parameters()).device
+   
+        processed_inputs = self.processor.process_texts(texts)
+        target_device = next(self.model.parameters()).device
         processed_inputs = {
             k: v.to(target_device) if isinstance(v, torch.Tensor) else v
             for k, v in processed_inputs.items()
         }
+        
         with torch.inference_mode():
             query_embeddings: torch.Tensor = self.model(**processed_inputs)
+        
         return query_embeddings
-
-    def calculate_similarity_scores(
-        self,
-        query_embeddings: Union[torch.Tensor, List[torch.Tensor]],
-        document_embeddings: Union[torch.Tensor, List[torch.Tensor]],
-        batch_size: int = 128,
-    ) -> torch.Tensor:
-        return self.processor.score(
-            qs=query_embeddings,
-            ps=document_embeddings,
-            batch_size=batch_size,
-        )
 
 def initialize_engine_from_yaml_config(
     config_filepath: str = "config.yaml",
     loader_class: Optional[Type[BaseModelLoader]] = None,
 ) -> EngineWrapper:
+    """
+    Initializes an engine from a YAML configuration
+    """
     config: ModelConfigWrapper = load_configuration_from_yaml_file(config_filepath)
+
     target_loader = loader_class or EngineModelLoader
+    
     model, processor = target_loader.load_model_and_processor(config)
+    
     return EngineWrapper(model=model, processor=processor, config=config)

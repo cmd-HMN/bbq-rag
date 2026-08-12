@@ -4,9 +4,11 @@ from torch import nn
 from transformers import Idefics3Model, Idefics3PreTrainedModel
 from transformers import logging as tf_logging
 
+from bbq.src.common.base import BaseModel
+
 tf_logging.set_verbosity_warning()
 
-class CIdeficsModel(Idefics3PreTrainedModel):
+class CIdeficsModel(Idefics3PreTrainedModel, BaseModel):
     """
     CIdeficsModel
 

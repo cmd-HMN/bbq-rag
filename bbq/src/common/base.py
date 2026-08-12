@@ -1,6 +1,17 @@
 from abc import ABC, abstractmethod
 from typing import Tuple, List, Any, Mapping
 
+class BaseModel(ABC):
+    """
+    Abstract base class for models in BBQ RAG.
+    """
+    @abstractmethod
+    def forward(self, *args: Any, **kwargs: Any) -> Any:
+        """
+        Forward pass of the model.
+        """
+        pass
+
 class BaseModelLoader(ABC):
     @classmethod
     @abstractmethod
@@ -38,14 +49,5 @@ class BaseEngineWrapper(ABC):
     @abstractmethod
     def encode_query_text_inputs(
         self, texts: List[str]
-    ) -> Any:
-        pass
-
-    @abstractmethod
-    def calculate_similarity_scores(
-        self,
-        query_embeddings: Any,
-        document_embeddings: Any,
-        batch_size: int = 128,
     ) -> Any:
         pass

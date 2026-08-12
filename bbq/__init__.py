@@ -1,4 +1,5 @@
 from .src import (
+    BaseModel,
     BaseModelLoader,
     BaseProcessor,
     BaseEngineWrapper,
@@ -14,6 +15,7 @@ from .src import (
 )
 
 __all__ = [
+    "BaseModel",
     "BaseModelLoader",
     "BaseProcessor",
     "BaseEngineWrapper",

@@ -1,4 +1,5 @@
 from bbq.src.common import (
+    BaseModel,
     BaseModelLoader,
     BaseProcessor,
     BaseEngineWrapper,
@@ -18,6 +19,7 @@ from bbq.src.utils import (
 )
 
 __all__ = [
+    "BaseModel",
     "BaseModelLoader",
     "BaseProcessor",
     "BaseEngineWrapper",

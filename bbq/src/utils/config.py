@@ -6,8 +6,6 @@ import yaml
 import torch
 from bbq.src.utils.errors import ConfigFNFWarning, ConfigParseError
 
-warnings.simplefilter("always", ConfigFNFWarning)
-
 class ModelConfigWrapper:
     """
     Wrapper class for model configuration.

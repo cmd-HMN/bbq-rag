@@ -12,7 +12,7 @@ from bbq.src.utils.errors import (
     LoRAAdapterLoadError,
     ProcessorLoadError,
 )
-from bbq.src.utils.config_wrapper import (
+from bbq.src.utils.config import (
     ModelConfigWrapper,
     load_configuration_from_yaml_file,
     determine_target_torch_device,

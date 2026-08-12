@@ -1,0 +1,21 @@
+# sample config  
+
+# only infernce supported
+base_model_id: "HuggingFaceTB/SmolVLM-256M-Instruct"
+#onlye support this model
+lora_adapter_id: "vidore/colSmol-256M"
+
+# change the embedding_dim if you want
+embedding_dim: 128
+
+# can be auto selected
+device: "auto"
+
+# data type
+torch_dtype: "bfloat16"
+  
+# masking for images in the imodel file 
+mask_non_image_embeddings: false
+
+# prompt for vision model 
+visual_prompt_command: "Describe this image."
