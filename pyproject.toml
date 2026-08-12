@@ -10,6 +10,11 @@ classifiers = [
     "Programming Language :: Python :: Implementation :: CPython",
     "Programming Language :: Python :: Implementation :: PyPy",
 ]
+dependencies = [
+    "pymupdf",
+    "watchdog",
+    "rich",
+]
 dynamic = ["version"]
 
 [dependency-groups]

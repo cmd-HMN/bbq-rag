@@ -23,6 +23,20 @@ from bbq.src.utils.model_loader import (
     EngineWrapper,
     initialize_engine_from_yaml_config,
 )
+from bbq.src.utils.tracker import ProcessedFilesTracker
+from bbq.src.utils.pdf_utils import (
+    compute_file_sha256_hash,
+    extract_pdf_pages_to_pil_images,
+)
+from bbq.src.utils.watcher import (
+    PDFWatchHandler,
+    start_pdf_folder_watcher,
+)
+from bbq.src.utils.tui import (
+    create_rich_console_logging_handler,
+    render_server_status_rich_panel,
+    configure_rich_logging_for_server,
+)
 
 __all__ = [
     "BaseModelLoader",
@@ -42,4 +56,12 @@ __all__ = [
     "EngineModelLoader",
     "EngineWrapper",
     "initialize_engine_from_yaml_config",
+    "ProcessedFilesTracker",
+    "compute_file_sha256_hash",
+    "extract_pdf_pages_to_pil_images",
+    "PDFWatchHandler",
+    "start_pdf_folder_watcher",
+    "create_rich_console_logging_handler",
+    "render_server_status_rich_panel",
+    "configure_rich_logging_for_server",
 ]

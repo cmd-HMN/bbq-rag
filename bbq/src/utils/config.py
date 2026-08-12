@@ -28,6 +28,10 @@ class ModelConfigWrapper:
         torch_dtype: str = "bfloat16",
         mask_non_image_embeddings: bool = False,
         visual_prompt_command: str = "What is written on the image.",
+        watch_folder_path: str = "data/watch",
+        embeddings_output_path: str = "data/embeddings",
+        sqlite_db_path: str = "data/tracker.db",
+        pdf_render_dpi: int = 150,
     ) -> None:
         self.base_model_id: str = base_model_id
         self.lora_adapter_id: str = lora_adapter_id
@@ -36,6 +40,10 @@ class ModelConfigWrapper:
         self.torch_dtype: str = torch_dtype
         self.mask_non_image_embeddings: bool = mask_non_image_embeddings
         self.visual_prompt_command: str = visual_prompt_command
+        self.watch_folder_path: str = watch_folder_path
+        self.embeddings_output_path: str = embeddings_output_path
+        self.sqlite_db_path: str = sqlite_db_path
+        self.pdf_render_dpi: int = pdf_render_dpi
 
     def format_visual_prompt_prefix(self) -> str:
         """
@@ -58,6 +66,10 @@ class ModelConfigWrapper:
             "mask_non_image_embeddings": self.mask_non_image_embeddings,
             "visual_prompt_command": self.visual_prompt_command,
             "visual_prompt_prefix": self.format_visual_prompt_prefix(),
+            "watch_folder_path": self.watch_folder_path,
+            "embeddings_output_path": self.embeddings_output_path,
+            "sqlite_db_path": self.sqlite_db_path,
+            "pdf_render_dpi": self.pdf_render_dpi,
         }
 
 def load_configuration_from_yaml_file(
@@ -96,18 +108,39 @@ def load_configuration_from_yaml_file(
     base_model_id: str = str(
         parsed_yaml_data.get("base_model_id", "HuggingFaceTB/SmolVLM-256M-Instruct")
     )
+    
     lora_adapter_id: str = str(
         parsed_yaml_data.get("lora_adapter_id", "vidore/colSmol-256M")
     )
+    
     embedding_dim: int = int(parsed_yaml_data.get("embedding_dim", 128))
+    
     device: str = str(parsed_yaml_data.get("device", "auto"))
+    
     torch_dtype: str = str(parsed_yaml_data.get("torch_dtype", "bfloat16"))
+    
     mask_non_image_embeddings: bool = bool(
         parsed_yaml_data.get("mask_non_image_embeddings", False)
     )
+    
     visual_prompt_command: str = str(
         parsed_yaml_data.get("visual_prompt_command", "What is written on the image.")
     )
+    
+    watch_folder_path: str = str(
+        parsed_yaml_data.get("watch_folder_path", "data/watch")
+    )
+    
+    embeddings_output_path: str = str(
+        parsed_yaml_data.get("embeddings_output_path", "data/embeddings")
+    
+    )
+    
+    sqlite_db_path: str = str(
+        parsed_yaml_data.get("sqlite_db_path", "data/tracker.db")
+    )
+    
+    pdf_render_dpi: int = int(parsed_yaml_data.get("pdf_render_dpi", 150))
 
     if not base_model_id:
         raise ValueError("base_model_id cannot be empty in configuration.")
@@ -120,6 +153,10 @@ def load_configuration_from_yaml_file(
         torch_dtype=torch_dtype,
         mask_non_image_embeddings=mask_non_image_embeddings,
         visual_prompt_command=visual_prompt_command,
+        watch_folder_path=watch_folder_path,
+        embeddings_output_path=embeddings_output_path,
+        sqlite_db_path=sqlite_db_path,
+        pdf_render_dpi=pdf_render_dpi,
     )
 
 def determine_target_torch_device(device_preference: str = "auto") -> str:

@@ -19,3 +19,15 @@ mask_non_image_embeddings: false
 
 # prompt for vision model 
 visual_prompt_command: "Describe this image."
+
+# watching folder
+watch_folder_path: "data/watch"
+
+# data 
+embeddings_output_path: "data/embeddings"
+
+# database
+sqlite_db_path: "data/tracker.db"
+
+# pdf image dpi will be send to the model
+pdf_render_dpi: 150

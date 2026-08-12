@@ -80,3 +80,8 @@ docs/_build/
 **/**/**.so
 
 **/notebooks
+
+data/
+
+
+**.svg
