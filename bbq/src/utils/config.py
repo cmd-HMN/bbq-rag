@@ -1,10 +1,24 @@
 import os
 import warnings
 import traceback
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 import yaml
 import torch
 from bbq.src.utils.errors import ConfigFNFWarning, ConfigParseError
+
+def get_system_cache_dir(subfolder: str = "") -> str:
+    """
+    Returns the system default user cache directory for bbq.
+    Respects XDG_CACHE_HOME if set, defaulting to ~/.cache/bbq.
+    """
+    cache_base = os.environ.get("XDG_CACHE_HOME")
+    if not cache_base:
+        cache_base = os.path.expanduser("~/.cache")
+    bbq_cache_dir = os.path.join(cache_base, "bbq")
+    if subfolder:
+        return os.path.join(bbq_cache_dir, subfolder)
+    return bbq_cache_dir
+
 
 class ModelConfigWrapper:
     """
@@ -29,8 +43,8 @@ class ModelConfigWrapper:
         mask_non_image_embeddings: bool = False,
         visual_prompt_command: str = "What is written on the image.",
         watch_folder_path: str = "data/watch",
-        embeddings_output_path: str = "data/embeddings",
-        sqlite_db_path: str = "data/tracker.db",
+        embeddings_output_path: Optional[str] = None,
+        sqlite_db_path: Optional[str] = None,
         pdf_render_dpi: int = 150,
     ) -> None:
         self.base_model_id: str = base_model_id
@@ -41,8 +55,8 @@ class ModelConfigWrapper:
         self.mask_non_image_embeddings: bool = mask_non_image_embeddings
         self.visual_prompt_command: str = visual_prompt_command
         self.watch_folder_path: str = watch_folder_path
-        self.embeddings_output_path: str = embeddings_output_path
-        self.sqlite_db_path: str = sqlite_db_path
+        self.embeddings_output_path: str = embeddings_output_path or get_system_cache_dir("embeddings")
+        self.sqlite_db_path: str = sqlite_db_path or get_system_cache_dir("tracker.db")
         self.pdf_render_dpi: int = pdf_render_dpi
 
     def format_visual_prompt_prefix(self) -> str:
@@ -132,12 +146,11 @@ def load_configuration_from_yaml_file(
     )
     
     embeddings_output_path: str = str(
-        parsed_yaml_data.get("embeddings_output_path", "data/embeddings")
-    
+        parsed_yaml_data.get("embeddings_output_path", get_system_cache_dir("embeddings"))
     )
     
     sqlite_db_path: str = str(
-        parsed_yaml_data.get("sqlite_db_path", "data/tracker.db")
+        parsed_yaml_data.get("sqlite_db_path", get_system_cache_dir("tracker.db"))
     )
     
     pdf_render_dpi: int = int(parsed_yaml_data.get("pdf_render_dpi", 150))

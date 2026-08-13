@@ -1,12 +1,9 @@
-"""
-Contains all the database related stuff
-"""
-
-
 import os
 import sqlite3
 from datetime import datetime, timezone
 from typing import Dict, Any, Optional
+
+from bbq.src.utils.config import get_system_cache_dir
 
 
 class ProcessedFilesTracker:
@@ -16,9 +13,9 @@ class ProcessedFilesTracker:
 
     Initializes a database connection and creates the necessary tables if they don't exist.
     """
-    def __init__(self, db_filepath: str = "data/tracker.db") -> None:
-        self.db_filepath: str = db_filepath
-        parent_dir: str = os.path.dirname(os.path.abspath(db_filepath))
+    def __init__(self, db_filepath: Optional[str] = None) -> None:
+        self.db_filepath: str = db_filepath or get_system_cache_dir("tracker.db")
+        parent_dir: str = os.path.dirname(os.path.abspath(self.db_filepath))
         if parent_dir and not os.path.exists(parent_dir):
             os.makedirs(parent_dir, exist_ok=True)
         self.initialize_database_tables()
@@ -68,6 +65,112 @@ class ProcessedFilesTracker:
                 "processed_at": row[6],
             }
 
+    def fetch_file_record_by_path(self, file_path: str) -> Optional[Dict[str, Any]]:
+        normalized_target_path: str = os.path.normpath(file_path)
+        with self.create_sqlite_connection() as connection:
+            cursor = connection.cursor()
+            cursor.execute(
+                """
+                SELECT file_hash, file_path, status, error_message, num_pages, embedding_path, processed_at
+                FROM processed_files
+                """
+            )
+            rows = cursor.fetchall()
+            for row in rows:
+                if row[1] == file_path or os.path.normpath(row[1]) == normalized_target_path:
+                    return {
+                        "file_hash": row[0],
+                        "file_path": row[1],
+                        "status": row[2],
+                        "error_message": row[3],
+                        "num_pages": row[4],
+                        "embedding_path": row[5],
+                        "processed_at": row[6],
+                    }
+            return None
+
+    def fetch_all_records(self) -> list:
+        with self.create_sqlite_connection() as connection:
+            cursor = connection.cursor()
+            cursor.execute(
+                """
+                SELECT file_hash, file_path, status, error_message, num_pages, embedding_path, processed_at
+                FROM processed_files
+                """
+            )
+            rows = cursor.fetchall()
+            return [
+                {
+                    "file_hash": row[0],
+                    "file_path": row[1],
+                    "status": row[2],
+                    "error_message": row[3],
+                    "num_pages": row[4],
+                    "embedding_path": row[5],
+                    "processed_at": row[6],
+                }
+                for row in rows
+            ]
+
+    def delete_file_record_by_hash(self, file_hash: str) -> Optional[Dict[str, Any]]:
+        record = self.fetch_file_record_by_hash(file_hash)
+        if record is None:
+            return None
+
+        with self.create_sqlite_connection() as connection:
+            cursor = connection.cursor()
+            cursor.execute(
+                "DELETE FROM processed_files WHERE file_hash = ?",
+                (file_hash,),
+            )
+            connection.commit()
+
+        return record
+
+    def delete_file_record_by_path(self, file_path: str) -> Optional[Dict[str, Any]]:
+        record = self.fetch_file_record_by_path(file_path)
+        if record is None:
+            return None
+
+        with self.create_sqlite_connection() as connection:
+            cursor = connection.cursor()
+            cursor.execute(
+                "DELETE FROM processed_files WHERE file_hash = ?",
+                (record["file_hash"],),
+            )
+            connection.commit()
+
+        return record
+
+    def remove_file_and_embeddings(self, file_path_or_hash: str) -> Optional[Dict[str, Any]]:
+        """
+        Deletes the file record from database and removes associated embedding files on disk.
+        Accepts either a file path or a file hash.
+        """
+        record = self.fetch_file_record_by_hash(file_path_or_hash)
+        if record is None:
+            record = self.fetch_file_record_by_path(file_path_or_hash)
+
+        if record is None:
+            return None
+
+        embedding_path = record.get("embedding_path")
+        if embedding_path and os.path.exists(embedding_path):
+            try:
+                os.remove(embedding_path)
+            except OSError:
+                pass
+
+        with self.create_sqlite_connection() as connection:
+            cursor = connection.cursor()
+            cursor.execute(
+                "DELETE FROM processed_files WHERE file_hash = ?",
+                (record["file_hash"],),
+            )
+            connection.commit()
+
+        return record
+
     def record_initial_file_pending(self, file_hash: str, file_path: str) -> None:
         with self.create_sqlite_connection() as connection:
             cursor = connection.cursor()
@@ -110,11 +213,17 @@ class ProcessedFilesTracker:
             now_iso: str = datetime.now(timezone.utc).isoformat()
             cursor.execute(
                 """
-                UPDATE processed_files
-                SET file_path = ?, status = 'done', error_message = NULL, num_pages = ?, embedding_path = ?, processed_at = ?
-                WHERE file_hash = ?
+                INSERT INTO processed_files (file_hash, file_path, status, error_message, num_pages, embedding_path, processed_at)
+                VALUES (?, ?, 'done', NULL, ?, ?, ?)
+                ON CONFLICT(file_hash) DO UPDATE SET
+                    file_path = excluded.file_path,
+                    status = 'done',
+                    error_message = NULL,
+                    num_pages = excluded.num_pages,
+                    embedding_path = excluded.embedding_path,
+                    processed_at = excluded.processed_at
                 """,
-                (file_path, num_pages, embedding_path, now_iso, file_hash),
+                (file_hash, file_path, num_pages, embedding_path, now_iso),
             )
             connection.commit()
 

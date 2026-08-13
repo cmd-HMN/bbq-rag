@@ -1,7 +1,7 @@
 import os
 import time
 import logging
-from typing import Callable, Tuple, Set
+from typing import Callable, Tuple, Set, Optional
 from watchdog.events import FileSystemEventHandler, FileSystemEvent
 from watchdog.observers.api import BaseObserver
 from watchdog.observers import Observer
@@ -12,9 +12,14 @@ class PDFWatchHandler(FileSystemEventHandler):
     """
     Watch handler for PDF files
     """
-    def __init__(self, callback_on_pdf_ready: Callable[[str], None]) -> None:
+    def __init__(
+        self,
+        callback_on_pdf_ready: Callable[[str], None],
+        callback_on_pdf_deleted: Optional[Callable[[str], None]] = None,
+    ) -> None:
         super().__init__()
         self.callback_on_pdf_ready: Callable[[str], None] = callback_on_pdf_ready
+        self.callback_on_pdf_deleted: Optional[Callable[[str], None]] = callback_on_pdf_deleted
         self.recently_processed_files: Set[str] = set()
 
     def process_detected_pdf_event(self, event: FileSystemEvent) -> None:
@@ -42,6 +47,15 @@ class PDFWatchHandler(FileSystemEventHandler):
     def on_modified(self, event: FileSystemEvent) -> None:
         self.process_detected_pdf_event(event)
 
+    def on_deleted(self, event: FileSystemEvent) -> None:
+        if event.is_directory:
+            return
+        filepath: str = str(event.src_path)
+        if not filepath.lower().endswith(".pdf"):
+            return
+        if self.callback_on_pdf_deleted is not None:
+            self.callback_on_pdf_deleted(filepath)
+
 
 
 def is_file_writing_complete(filepath: str, wait_seconds: float = 1.0) -> bool:
@@ -62,6 +76,7 @@ def is_file_writing_complete(filepath: str, wait_seconds: float = 1.0) -> bool:
 def start_pdf_folder_watcher(
     watch_directory_path: str,
     callback_on_pdf_ready: Callable[[str], None],
+    callback_on_pdf_deleted: Optional[Callable[[str], None]] = None,
 ) -> Tuple[BaseObserver, PDFWatchHandler]:
     """
     Start watching a directory for PDF files
@@ -69,7 +84,10 @@ def start_pdf_folder_watcher(
     if not os.path.exists(watch_directory_path):
         os.makedirs(watch_directory_path, exist_ok=True)
 
-    event_handler = PDFWatchHandler(callback_on_pdf_ready=callback_on_pdf_ready)
+    event_handler = PDFWatchHandler(
+        callback_on_pdf_ready=callback_on_pdf_ready,
+        callback_on_pdf_deleted=callback_on_pdf_deleted,
+    )
     observer = Observer()
     observer.schedule(event_handler, path=watch_directory_path, recursive=False)
     observer.start()

@@ -27,6 +27,7 @@ from bbq.src.utils.tracker import ProcessedFilesTracker
 from bbq.src.utils.pdf_utils import (
     compute_file_sha256_hash,
     extract_pdf_pages_to_pil_images,
+    extract_single_pdf_page_image,
 )
 from bbq.src.utils.watcher import (
     PDFWatchHandler,
@@ -59,6 +60,7 @@ __all__ = [
     "ProcessedFilesTracker",
     "compute_file_sha256_hash",
     "extract_pdf_pages_to_pil_images",
+    "extract_single_pdf_page_image",
     "PDFWatchHandler",
     "start_pdf_folder_watcher",
     "create_rich_console_logging_handler",

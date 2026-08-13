@@ -99,15 +99,19 @@ class CIdeficsProcessor(Idefics3Processor, BaseProcessor):
         self, texts: List[str], **kwargs: Any
     ) -> Union[BatchFeature, BatchEncoding]:
         """
-        Processes a list of texts
-
-        Args:
-            texts (List[str]): The texts to process.
-
-        Returns:
-            Union[BatchFeature, BatchEncoding]: The processed texts
+        Processes a list of query texts by adding 'Question: ' prefix and '<end_of_utterance>' suffix
+        required by ColPali / ColSmol models to activate visual-text projection features.
         """
-        return self(text=texts, return_tensors="pt", padding="longest")  # type: ignore[call-arg]
+        formatted_texts = []
+        for text in texts:
+            t = text.strip()
+            if not t.startswith("Question:"):
+                t = f"Question: {t}"
+            if not t.endswith("<end_of_utterance>"):
+                t = f"{t}<end_of_utterance>"
+            formatted_texts.append(t)
+
+        return self(text=formatted_texts, return_tensors="pt", padding="longest")  # type: ignore[call-arg]
 
     def score(
         self,

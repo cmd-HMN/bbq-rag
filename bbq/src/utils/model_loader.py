@@ -110,24 +110,34 @@ class EngineWrapper(BaseEngineWrapper):
         self.processor = processor
         self.config: ModelConfigWrapper = config
 
-    def encode_multimodal_document_images(self, images: List[Any]) -> torch.Tensor:
+    def encode_multimodal_document_images(
+        self, images: List[Any], batch_size: int = 4
+    ) -> torch.Tensor:
         """
-        Encodes a list of images into embeddings
+        Encodes a list of images into embeddings using sub-batching to prevent OOM errors on large documents.
         """
         if not images:
             raise ValueError("Input image list cannot be empty.")
-        
-        processed_inputs = self.processor.process_images(images)
+
         target_device = next(self.model.parameters()).device
-        processed_inputs = {
-            k: v.to(target_device) if isinstance(v, torch.Tensor) else v
-            for k, v in processed_inputs.items()
-        }
-        
-        with torch.inference_mode():
-            image_embeddings: torch.Tensor = self.model(**processed_inputs)
-        
-        return image_embeddings
+        all_embeddings = []
+
+        for i in range(0, len(images), batch_size):
+            batch_images = images[i : i + batch_size]
+            processed_inputs = self.processor.process_images(batch_images)
+            processed_inputs = {
+                k: v.to(target_device) if isinstance(v, torch.Tensor) else v
+                for k, v in processed_inputs.items()
+            }
+
+            with torch.inference_mode():
+                batch_embeddings: torch.Tensor = self.model(**processed_inputs)
+                all_embeddings.append(batch_embeddings.cpu())
+
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+
+        return torch.cat(all_embeddings, dim=0)
 
     def encode_query_text_inputs(self, texts: List[str]) -> torch.Tensor:
         """
