@@ -12,12 +12,6 @@ from bbq.src.utils.errors import (
     LoRAAdapterLoadError,
     ProcessorLoadError,
 )
-from bbq.src.utils.config import (
-    ModelConfigWrapper,
-    load_configuration_from_yaml_file,
-    determine_target_torch_device,
-    resolve_torch_data_type,
-)
 from bbq.src.utils.model_loader import (
     EngineModelLoader,
     EngineWrapper,
@@ -50,10 +44,6 @@ __all__ = [
     "BaseModelInstantiateError",
     "LoRAAdapterLoadError",
     "ProcessorLoadError",
-    "ModelConfigWrapper",
-    "load_configuration_from_yaml_file",
-    "determine_target_torch_device",
-    "resolve_torch_data_type",
     "EngineModelLoader",
     "EngineWrapper",
     "initialize_engine_from_yaml_config",

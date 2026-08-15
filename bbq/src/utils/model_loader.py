@@ -6,7 +6,7 @@ from transformers import logging as tf_logging
 
 from bbq.src.common.base import BaseEngineWrapper, BaseModel, BaseModelLoader, BaseProcessor
 from bbq.src.models.registry import ModelRegistry
-from bbq.src.utils.config import (
+from bbq.src.config import (
     ModelConfigWrapper,
     determine_target_torch_device,
     load_configuration_from_yaml_file,

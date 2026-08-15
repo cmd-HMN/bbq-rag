@@ -5,7 +5,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.logging import RichHandler
 
-from bbq.src.utils.config import ModelConfigWrapper
+from bbq.src.config import ModelConfigWrapper
 
 
 def create_rich_console_logging_handler() -> RichHandler:

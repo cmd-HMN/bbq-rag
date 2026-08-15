@@ -3,7 +3,7 @@ import sqlite3
 from datetime import datetime, timezone
 from typing import Dict, Any, Optional
 
-from bbq.src.utils.config import get_system_cache_dir
+from bbq.src.config import get_system_cache_dir
 
 
 class ProcessedFilesTracker:

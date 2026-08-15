@@ -11,7 +11,7 @@ from rich.console import Console
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
-from bbq.src.utils.config import (
+from bbq.src.config import (
     ModelConfigWrapper,
     load_configuration_from_yaml_file,
 )

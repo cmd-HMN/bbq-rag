@@ -12,7 +12,7 @@ import numpy as np
 import pytest
 import torch
 
-from bbq.src.utils.config import ModelConfigWrapper, get_system_cache_dir
+from bbq.src.config import ModelConfigWrapper, get_system_cache_dir
 from bbq.src.utils.tracker import ProcessedFilesTracker
 from bbq.src.server import query_indexed_documents, create_colpali_fastapi_app
 from bbq.src.client import ColPaliClient
