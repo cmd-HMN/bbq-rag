@@ -48,3 +48,11 @@ class ProcessorLoadError(BaseBBQEngineException):
     """
     def __init__(self, message: str = "Failed to load processor.") -> None:
         super().__init__(message)
+
+class ModelNotFound(UserWarning):
+    """
+    Warning raised when the model is not found. Especially in Model Registry
+    """
+    def __init__(self, message: str = "Failed to load model.") -> None:
+        super().__init__(message)
+        self.message: str = message

@@ -8,48 +8,48 @@ Comparing:
 
 ### Small Workload (20 Docs, Q=10, L=50-150)
 - **Correctness Check**: PASS
-- **maxsimd Throughput**: 24995.2 docs/sec
+- **maxsimd Throughput**: 26636.6 docs/sec
 
 | Implementation | Latency (ms) | Speed vs maxsimd |
 |---|---|---|
-| **4. maxsimd (My Implementation)** | **0.800 ± 0.108** | **1.00x (Baseline)** |
-| 1. maxsim-cpu (PyPI) | 0.109 ± 0.021 | 7.34x faster |
-| 2. PyTorch (Batched) | 0.786 ± 0.160 | 1.02x faster |
-| 2. PyTorch (Loop) | 0.776 ± 0.046 | 1.03x faster |
-| 3. NumPy (Reference) | 0.615 ± 0.105 | 1.30x faster |
+| **4. maxsimd (My Implementation)** | **0.751 ± 0.107** | **1.00x (Baseline)** |
+| 1. maxsim-cpu (PyPI) | 0.117 ± 0.013 | 6.39x faster |
+| 2. PyTorch (Batched) | 0.674 ± 0.049 | 1.11x faster |
+| 2. PyTorch (Loop) | 0.688 ± 0.060 | 1.09x faster |
+| 3. NumPy (Reference) | 0.599 ± 0.119 | 1.25x faster |
 
 ### Medium Workload (100 Docs, Q=16, L=100-300)
 - **Correctness Check**: PASS
-- **maxsimd Throughput**: 13527.2 docs/sec
+- **maxsimd Throughput**: 19920.1 docs/sec
 
 | Implementation | Latency (ms) | Speed vs maxsimd |
 |---|---|---|
-| **4. maxsimd (My Implementation)** | **7.393 ± 1.637** | **1.00x (Baseline)** |
-| 1. maxsim-cpu (PyPI) | 1.294 ± 0.167 | 5.71x faster |
-| 2. PyTorch (Batched) | 8.595 ± 0.547 | 1.16x slower |
-| 2. PyTorch (Loop) | 4.221 ± 0.407 | 1.75x faster |
-| 3. NumPy (Reference) | 5.239 ± 0.546 | 1.41x faster |
+| **4. maxsimd (My Implementation)** | **5.020 ± 0.591** | **1.00x (Baseline)** |
+| 1. maxsim-cpu (PyPI) | 1.426 ± 0.191 | 3.52x faster |
+| 2. PyTorch (Batched) | 7.556 ± 0.944 | 1.51x slower |
+| 2. PyTorch (Loop) | 4.655 ± 0.766 | 1.08x faster |
+| 3. NumPy (Reference) | 4.862 ± 0.373 | 1.03x faster |
 
 ### Large Workload (500 Docs, Q=32, L=100-500)
 - **Correctness Check**: PASS
-- **maxsimd Throughput**: 6963.6 docs/sec
+- **maxsimd Throughput**: 8589.1 docs/sec
 
 | Implementation | Latency (ms) | Speed vs maxsimd |
 |---|---|---|
-| **4. maxsimd (My Implementation)** | **71.802 ± 8.442** | **1.00x (Baseline)** |
-| 1. maxsim-cpu (PyPI) | 12.629 ± 2.718 | 5.69x faster |
-| 2. PyTorch (Batched) | 65.999 ± 10.699 | 1.09x faster |
-| 2. PyTorch (Loop) | 26.770 ± 1.700 | 2.68x faster |
-| 3. NumPy (Reference) | 35.154 ± 4.808 | 2.04x faster |
+| **4. maxsimd (My Implementation)** | **58.213 ± 5.689** | **1.00x (Baseline)** |
+| 1. maxsim-cpu (PyPI) | 10.724 ± 2.157 | 5.43x faster |
+| 2. PyTorch (Batched) | 48.857 ± 4.508 | 1.19x faster |
+| 2. PyTorch (Loop) | 21.187 ± 1.368 | 2.75x faster |
+| 3. NumPy (Reference) | 26.380 ± 3.928 | 2.21x faster |
 
 ### High Variance Workload (100 Docs, Q=16, L=20-1000)
 - **Correctness Check**: PASS
-- **maxsimd Throughput**: 7125.5 docs/sec
+- **maxsimd Throughput**: 7404.5 docs/sec
 
 | Implementation | Latency (ms) | Speed vs maxsimd |
 |---|---|---|
-| **4. maxsimd (My Implementation)** | **14.034 ± 1.287** | **1.00x (Baseline)** |
-| 1. maxsim-cpu (PyPI) | 4.019 ± 2.699 | 3.49x faster |
-| 2. PyTorch (Batched) | 12.721 ± 0.463 | 1.10x faster |
-| 2. PyTorch (Loop) | 4.436 ± 0.175 | 3.16x faster |
-| 3. NumPy (Reference) | 5.921 ± 0.680 | 2.37x faster |
+| **4. maxsimd (My Implementation)** | **13.505 ± 2.147** | **1.00x (Baseline)** |
+| 1. maxsim-cpu (PyPI) | 2.335 ± 0.070 | 5.78x faster |
+| 2. PyTorch (Batched) | 14.922 ± 3.702 | 1.10x slower |
+| 2. PyTorch (Loop) | 4.367 ± 0.026 | 3.09x faster |
+| 3. NumPy (Reference) | 6.444 ± 1.251 | 2.10x faster |

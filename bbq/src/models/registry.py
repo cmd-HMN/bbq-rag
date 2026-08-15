@@ -2,7 +2,7 @@ from typing import List, Tuple, Type, Union, Any
 from bbq.src.common.base import BaseModel, BaseProcessor
 from bbq.src.models.idefics3.imodel import CIdeficsModel
 from bbq.src.models.idefics3.iprocess import CIdeficsProcessor
-
+from bbq.src.utils.errors import ModelNotFound
 
 class ModelRegistry:
     """
@@ -37,7 +37,7 @@ class ModelRegistry:
                 return model_cls, processor_cls
 
         if not cls._entries:
-            raise RuntimeError("No models registered in ModelRegistry.")
+            raise ModelNotFound("No models registered in ModelRegistry.")
 
         # Default fallback to first registered entry
         return cls._entries[0]
