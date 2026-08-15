@@ -2,7 +2,7 @@ from typing import List, Tuple, Type, Union, Any
 from bbq.src.common.base import BaseModel, BaseProcessor
 from bbq.src.models.idefics3.imodel import CIdeficsModel
 from bbq.src.models.idefics3.iprocess import CIdeficsProcessor
-from bbq.src.utils.errors import ModelNotFound
+from bbq.src.common.errors import ModelNotFound
 
 class ModelRegistry:
     """

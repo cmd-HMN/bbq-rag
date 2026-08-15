@@ -4,7 +4,7 @@ import traceback
 from typing import Dict, Any, Optional
 import yaml
 import torch
-from bbq.src.utils.errors import ConfigFNFWarning, ConfigParseError
+from bbq.src.common.errors import ConfigFNFWarning, ConfigParseError
 
 def get_system_cache_dir(subfolder: str = "") -> str:
     """

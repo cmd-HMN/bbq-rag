@@ -1,9 +1,7 @@
 import os
 import hashlib
 import io
-import math
-from typing import List, Tuple
-import numpy as np
+from typing import List
 import pymupdf
 from PIL import Image
 
@@ -107,9 +105,3 @@ def extract_single_pdf_page_image(
     pil_image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
     document.close()
     return pil_image
-
-
-
-
-
-

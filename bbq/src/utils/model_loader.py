@@ -12,7 +12,7 @@ from bbq.src.config import (
     load_configuration_from_yaml_file,
     resolve_torch_data_type,
 )
-from bbq.src.utils.errors import (
+from bbq.src.common.errors import (
     BaseModelInstantiateError,
     LoRAAdapterLoadError,
     ProcessorLoadError,

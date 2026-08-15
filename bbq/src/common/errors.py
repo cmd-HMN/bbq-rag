@@ -56,3 +56,10 @@ class ModelNotFound(UserWarning):
     def __init__(self, message: str = "Failed to load model.") -> None:
         super().__init__(message)
         self.message: str = message
+
+class PdfNotFoundError(BaseBBQEngineException):
+    """
+    Exception raised when a PDF file is not found.
+    """
+    def __init__(self, message: str = "PDF file was not found.") -> None:
+        super().__init__(message)
