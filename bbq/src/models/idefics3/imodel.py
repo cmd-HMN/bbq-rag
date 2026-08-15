@@ -38,6 +38,7 @@ class CIdeficsModel(Idefics3PreTrainedModel, BaseModel):
         self.model: Idefics3Model = Idefics3Model(config=config)
 
         self.dim: int = getattr(config, "embedding_dim", 128)
+        torch.manual_seed(42)
         self.linear: nn.Linear = nn.Linear(self.model.config.text_config.hidden_size, self.dim)
         self.mask_non_image_embeddings: bool = getattr(config, "mask_non_image_embeddings", False)
         self.main_input_name: str = "doc_input_ids"
