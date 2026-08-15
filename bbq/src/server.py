@@ -26,7 +26,7 @@ from bbq.src.utils.pdf_utils import (
     extract_single_pdf_page_image,
 )
 from bbq.src.utils.watcher import start_pdf_folder_watcher
-from bbq.src.utils.tui import (
+from bbq.src.terminal.tui import (
     render_server_status_rich_panel,
     configure_rich_logging_for_server,
 )

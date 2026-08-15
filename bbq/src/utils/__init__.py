@@ -19,9 +19,6 @@ _LAZY_IMPORTS = {
     "ProcessedFilesTracker": "bbq.src.utils.tracker",
     "PDFWatchHandler": "bbq.src.utils.watcher",
     "start_pdf_folder_watcher": "bbq.src.utils.watcher",
-    "create_rich_console_logging_handler": "bbq.src.utils.tui",
-    "render_server_status_rich_panel": "bbq.src.utils.tui",
-    "configure_rich_logging_for_server": "bbq.src.utils.tui",
 }
 
 
