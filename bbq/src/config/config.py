@@ -1,9 +1,8 @@
 import os
+import yaml
 import warnings
 import traceback
 from typing import Dict, Any, Optional
-import yaml
-import torch
 from bbq.src.common.errors import ConfigFNFWarning, ConfigParseError
 
 def get_system_cache_dir(subfolder: str = "") -> str:
@@ -182,13 +181,14 @@ def determine_target_torch_device(device_preference: str = "auto") -> str:
     Returns:
         str: The target torch device.
     """
+    import torch
     if device_preference == "auto":
         return "cuda" if torch.cuda.is_available() else "cpu"
     return device_preference
 
 def resolve_torch_data_type(
     dtype_name: str = "bfloat16", target_device: str = "cpu"
-) -> torch.dtype:
+) -> Any:
     """
     Resolve the torch data type based on the provided dtype name and target device.
 
@@ -199,6 +199,7 @@ def resolve_torch_data_type(
     Returns:
         torch.dtype: The resolved torch data type.
     """
+    import torch
     if target_device == "cpu":
         return torch.float32
     if dtype_name == "bfloat16":

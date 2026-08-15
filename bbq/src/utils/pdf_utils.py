@@ -2,8 +2,8 @@ import os
 import hashlib
 import io
 from typing import List
-import pymupdf
 from PIL import Image
+
 
 def compute_file_sha256_hash(filepath: str) -> str:
     """
@@ -21,6 +21,8 @@ def get_pdf_total_pages(pdf_filepath: str) -> int:
     """
     Returns the total number of pages in a PDF document without extracting page images.
     """
+    import pymupdf
+
     target_path = pdf_filepath
     if not os.path.exists(target_path):
         abs_path = os.path.abspath(pdf_filepath)
@@ -42,6 +44,8 @@ def extract_pdf_page_range_to_pil_images(
     Extracts a range of PDF pages [start_page_idx, end_page_idx) as PIL Images.
     Useful for batch processing large documents without exhausting RAM.
     """
+    import pymupdf
+
     target_path = pdf_filepath
     if not os.path.exists(target_path):
         abs_path = os.path.abspath(pdf_filepath)
@@ -77,12 +81,15 @@ def extract_pdf_pages_to_pil_images(
         pdf_filepath=pdf_filepath, start_page_idx=0, end_page_idx=100000, dpi=dpi
     )
 
+
 def extract_single_pdf_page_image(
     pdf_filepath: str, page_number: int, dpi: int = 150
 ) -> Image.Image:
     """
     Extracts a specific PDF page (1-based index) as a PIL Image.
     """
+    import pymupdf
+
     target_path = pdf_filepath
     if not os.path.exists(target_path):
         abs_path = os.path.abspath(pdf_filepath)

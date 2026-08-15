@@ -1,11 +1,6 @@
 import importlib
 from typing import Any
 
-from bbq.src.common.base import (
-    BaseModelLoader,
-    BaseProcessor,
-    BaseEngineWrapper,
-)
 from bbq.src.utils.pdf_utils import (
     compute_file_sha256_hash,
     extract_pdf_pages_to_pil_images,
@@ -13,6 +8,9 @@ from bbq.src.utils.pdf_utils import (
 )
 
 _LAZY_IMPORTS = {
+    "BaseModelLoader": "bbq.src.common.base",
+    "BaseProcessor": "bbq.src.common.base",
+    "BaseEngineWrapper": "bbq.src.common.base",
     "EngineModelLoader": "bbq.src.utils.model_loader",
     "EngineWrapper": "bbq.src.utils.model_loader",
     "initialize_engine_from_yaml_config": "bbq.src.utils.model_loader",

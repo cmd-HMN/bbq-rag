@@ -3,9 +3,7 @@ Client module for interacting with the ColPali Document Retrieval Server,
 retrieving document matches, and fetching/saving page images.
 """
 
-import sys
 import os
-import argparse
 import logging
 import time
 from typing import List, Dict, Any, Optional
@@ -15,10 +13,11 @@ import io
 
 logger = logging.getLogger("bbq.client")
 
-class ColPaliClient:
+class BBQClient:
     """
     Client for querying the running ColPali RAG indexing server and fetching page images.
     """
+
     def __init__(self, server_url: str = "http://localhost:8000") -> None:
         self.server_url: str = server_url.rstrip("/")
 
@@ -116,57 +115,3 @@ def get_local_pdf_page_image(
         print(f"Saved local PDF page image to {save_path}")
 
     return img
-
-
-def main():
-    parser = argparse.ArgumentParser(description="ColPali RAG Query & Image Viewer Client")
-    parser.add_argument("query", type=str, help="Search query string to retrieve PDF parts")
-    parser.add_argument("--server", type=str, default="http://localhost:8000", help="ColPali server URL")
-    parser.add_argument("--top-k", type=int, default=5, help="Number of top PDF page matches to retrieve")
-    parser.add_argument("--save-images", action="store_true", help="Save retrieved PDF page images to disk")
-    parser.add_argument("--verbose", "-v", action="store_true", help="Enable verbose debug/info logging")
-
-    args = parser.parse_args()
-
-    log_level = logging.INFO if args.verbose else logging.WARNING
-    logging.basicConfig(level=log_level, format="[%(asctime)s] [%(levelname)s] [%(name)s]: %(message)s")
-
-    client = ColPaliClient(server_url=args.server)
-    try:
-        print(f"Sending query to {args.server}: '{args.query}' (top_k={args.top_k})...\n")
-        results = client.query(query_text=args.query, top_k=args.top_k)
-
-        if not results:
-            print("No matching PDF pages found.")
-            return
-
-        print(f"Top {len(results)} Matching PDF Parts:\n" + "=" * 60)
-        for i, res in enumerate(results, 1):
-            print(f"Rank {i}:")
-            print(f"  Score       : {res['score']:.4f}")
-            print(f"  PDF File    : {res['file_path']}")
-            print(f"  Page        : Page {res['page_number']} of {res['total_pages']}")
-            print(f"  File Hash   : {res['file_hash'][:12]}")
-
-            if args.save_images:
-                out_img_path = f"retrieved_rank_{i}_page_{res['page_number']}.png"
-                try:
-                    client.get_page_image(
-                        file_path=res["file_path"],
-                        page_number=res["page_number"],
-                        save_path=out_img_path,
-                    )
-                except Exception as img_err:
-                    logger.error(f"Failed to fetch page image from server for rank {i}: {img_err}")
-                    print(f"  [Failed to fetch page image from server: {img_err}]")
-
-            print("-" * 60)
-
-    except Exception as err:
-        logger.error(f"Error querying ColPali server: {err}", exc_info=True)
-        print(f"Error querying ColPali server: {err}", file=sys.stderr)
-        sys.exit(1)
-
-
-if __name__ == "__main__":
-    main()

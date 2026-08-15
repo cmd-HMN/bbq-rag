@@ -14,8 +14,8 @@ import torch
 
 from bbq.src.config import ModelConfigWrapper, get_system_cache_dir
 from bbq.src.storage.sql import SqlliteDB
-from bbq.src.server import query_indexed_documents, create_colpali_fastapi_app
-from bbq.src.client import ColPaliClient
+from bbq.src.server import query_indexed_documents, create_bbq_fastapi_app
+from bbq.src.client import BBQClient
 import maxsimd
 
 
