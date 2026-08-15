@@ -16,7 +16,6 @@ _LAZY_IMPORTS = {
     "EngineModelLoader": "bbq.src.utils.model_loader",
     "EngineWrapper": "bbq.src.utils.model_loader",
     "initialize_engine_from_yaml_config": "bbq.src.utils.model_loader",
-    "ProcessedFilesTracker": "bbq.src.utils.tracker",
     "PDFWatchHandler": "bbq.src.utils.watcher",
     "start_pdf_folder_watcher": "bbq.src.utils.watcher",
 }

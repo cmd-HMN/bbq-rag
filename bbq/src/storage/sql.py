@@ -6,13 +6,14 @@ from typing import Dict, Any, Optional
 from bbq.src.config import get_system_cache_dir
 
 
-class ProcessedFilesTracker:
+class SqlliteDB:
     """
     Class for tracking the status of processed files
 
 
     Initializes a database connection and creates the necessary tables if they don't exist.
     """
+
     def __init__(self, db_filepath: Optional[str] = None) -> None:
         self.db_filepath: str = db_filepath or get_system_cache_dir("tracker.db")
         parent_dir: str = os.path.dirname(os.path.abspath(self.db_filepath))

@@ -13,7 +13,7 @@ import pytest
 import torch
 
 from bbq.src.config import ModelConfigWrapper, get_system_cache_dir
-from bbq.src.utils.tracker import ProcessedFilesTracker
+from bbq.src.storage.sql import SqlliteDB
 from bbq.src.server import query_indexed_documents, create_colpali_fastapi_app
 from bbq.src.client import ColPaliClient
 import maxsimd
@@ -29,7 +29,7 @@ def test_system_cache_path():
     assert config.embeddings_output_path == get_system_cache_dir("embeddings")
     assert config.sqlite_db_path == get_system_cache_dir("tracker.db")
 
-    tracker = ProcessedFilesTracker()
+    tracker = SqlliteDB()
     assert tracker.db_filepath == get_system_cache_dir("tracker.db")
 
 
@@ -58,7 +58,7 @@ def test_query_retrieval_pipeline():
         emb_dir = os.path.join(temp_dir, "embeddings")
         os.makedirs(emb_dir, exist_ok=True)
 
-        tracker = ProcessedFilesTracker(db_filepath=db_path)
+        tracker = SqlliteDB(db_filepath=db_path)
 
         # Create mock 2-page document embedding
         file_hash = "test_hash_123"
