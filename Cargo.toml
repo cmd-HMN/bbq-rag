@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 homepage = "https://github.com/cmd-HMN"
 description = "This packages is the simd implementations of max sim function for faster calculation"
+license = "MIT"
 # readme = "README.md"
 keywords = ["maxsimd"]
 

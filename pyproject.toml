@@ -5,6 +5,7 @@ build-backend = "maturin"
 [project]
 name = "colpali-rag"
 requires-python = ">=3.8"
+license = { text = "MIT" }
 classifiers = [
     "Programming Language :: Rust",
     "Programming Language :: Python :: Implementation :: CPython",

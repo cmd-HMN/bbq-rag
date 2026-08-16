@@ -41,4 +41,4 @@ All rights, titles, copyrights, and intellectual property in the original ColPal
 
 All rights to `maxsim-cpu` belong to its respective creators and contributors.
 
-This project is an independent open-source implementation and derivative exploration intended for research and educational purposes under the [Apache 2.0 License](LICENSE).
+This project is an independent open-source implementation and derivative exploration intended for research and educational purposes under the [MIT License](LICENSE).

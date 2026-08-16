@@ -2,7 +2,7 @@
 
 # <img src="assets/logo.png" alt="BBQ-RAG Logo" width="160" style="vertical-align: middle; margin-right: 12px;"/> BBQ-RAG
 
-[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-0284c7)](https://www.python.org/)
 [![Rust](https://img.shields.io/badge/rust-1.75%2B-ea580c.svg)](https://www.rust-lang.org/)
 [![CPU](<https://img.shields.io/badge/CPU-x86__64%20(AVX2%20%2B%20FMA)-16a34a.svg>)](#performance--benchmarks)
