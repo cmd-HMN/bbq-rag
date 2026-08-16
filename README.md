@@ -90,7 +90,7 @@ Or build a redistributable wheel:
 
 ```bash
 maturin build --release -o dist/
-pip install dist/colpali_rag-*.whl
+pip install dist/bbq_rag-*.whl
 ```
 
 ---

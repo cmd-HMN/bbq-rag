@@ -22,7 +22,7 @@ def create_bbq_fastapi_app(
     """
     Creates the FastAPI web server for query retrieval, image rendering, and server status.
     """
-    app = FastAPI(title="BBQ RAG Server", version="1.0.0")
+    app = FastAPI(title="BBQ RAG Server", version="0.1.0")
 
     def _get_active_engine() -> Optional[Any]:
         if engine is not None:
