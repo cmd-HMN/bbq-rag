@@ -64,8 +64,8 @@ _Note: The benchmark results shown above are preliminary and generated in a synt
 ### Step 1: Clone Repository & Create Virtual Environment
 
 ```bash
-git clone https://github.com/cmd-HMN/ColPali-RAG.git
-cd ColPali-RAG
+git clone https://github.com/cmd-HMN/bbq-rag.git
+cd bbq-rag
 
 python3 -m venv .venv
 source .venv/bin/activate
