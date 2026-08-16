@@ -50,6 +50,27 @@ def test_maxsim_vrlen_functionality():
     assert isinstance(scores[1], float)
 
 
+def test_maxsim_zero_copy_and_pointer():
+    """Verify maxsim 2D, 3D, and raw pointer functions."""
+    dim = 128
+    q_len = 8
+    q_mat = np.random.randn(q_len, dim).astype(np.float32)
+    d_2d = np.random.randn(20, dim).astype(np.float32)
+    d_3d = np.random.randn(3, 20, dim).astype(np.float32)
+
+    # 2D and 3D direct calls
+    s_2d = maxsimd.maxsim(q_mat, d_2d)
+    s_3d = maxsimd.maxsim(q_mat, d_3d)
+    assert len(s_2d) == 1
+    assert len(s_3d) == 3
+
+    # Pointer calls
+    s_ptr = maxsimd.maxsim_ptr(q_mat.ctypes.data, d_2d.ctypes.data, q_len, 20, dim)
+    s_3d_ptr = maxsimd.maxsim_3d_ptr(q_mat.ctypes.data, d_3d.ctypes.data, q_len, 3, 20, dim)
+    assert np.isclose(s_2d[0], s_ptr)
+    assert np.allclose(s_3d, s_3d_ptr)
+
+
 def test_query_retrieval_pipeline():
     """Test retrieving top matching PDF page parts using query_indexed_documents."""
     temp_dir = tempfile.mkdtemp()

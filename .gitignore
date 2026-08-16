@@ -87,3 +87,5 @@ data/
 **.svg
 
 **.png
+
+benchmarks/**.md

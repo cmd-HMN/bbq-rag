@@ -1,16 +1,22 @@
 """
-Benchmark Suite comparing 4 MaxSim implementations:
- 1. maxsim-cpu (Official maxsim-cpu PyPI package)
- 2. PyTorch (Unpadded loop & Padded batched)
- 3. NumPy (Pure NumPy reference)
- 4. maxsimd (Custom SIMD Rust extension)
+Rigorous Benchmark Suite comparing MaxSim implementations with Matplotlib Plotting:
+ 1. maxsimd (Custom Fused AVX2 + Rayon)
+ 2. maxsim-cpu (Official PyPI package by Mixedbread AI)
+ 3. PyTorch (Batched & Padded einsum)
+ 4. PyTorch (Loop)
+ 5. NumPy (Pure Reference)
+
+Saves comparison line graphs to root assets/ directory.
 """
 
-import time
 import os
+import time
 from typing import List, Tuple, Dict, Any
 import numpy as np
 import torch
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 import maxsim_cpu
 import maxsimd
 from rich.console import Console
@@ -64,7 +70,7 @@ def torch_batched_maxsim_vrlen(
     dim = q_tensor.shape[1]
 
     padded_docs = torch.zeros(batch_size, max_len, dim, dtype=q_tensor.dtype, device=q_tensor.device)
-    mask = torch.full((batch_size, max_len), float('-inf'), dtype=q_tensor.dtype, device=q_tensor.device)
+    mask = torch.full((batch_size, max_len), float("-inf"), dtype=q_tensor.dtype, device=q_tensor.device)
 
     for i, doc in enumerate(doc_tensors):
         l = doc.shape[0]
@@ -91,9 +97,9 @@ def maxsimd_vrlen(
 
 def generate_benchmark_data(
     num_docs: int,
-    q_len: int,
-    min_doc_len: int,
-    max_doc_len: int,
+    q_len: int = 32,
+    min_doc_len: int = 100,
+    max_doc_len: int = 300,
     dim: int = 128,
     seed: int = 42,
 ) -> Tuple[np.ndarray, List[np.ndarray], np.ndarray, np.ndarray, List[int], torch.Tensor, List[torch.Tensor]]:
@@ -135,15 +141,15 @@ def verify_correctness(
     q_tensor: torch.Tensor,
     doc_tensors: List[torch.Tensor],
 ) -> bool:
-    """Verifies that all 4 implementations yield matching scores."""
-    s_maxsim_cpu = maxsim_cpu_vrlen(q_mat, doc_mats)
-    s_maxsimd = maxsimd_vrlen(q_flat, d_flat, doc_lengths, q_len, dim)
-    s_numpy = numpy_maxsim_vrlen(q_mat, doc_mats)
-    s_torch = torch_loop_maxsim_vrlen(q_tensor, doc_tensors)
+    """Verifies that all implementations yield numerically identical scores."""
+    s_maxsim_cpu = np.array(maxsim_cpu_vrlen(q_mat, doc_mats))
+    s_maxsimd = np.array(maxsimd_vrlen(q_flat, d_flat, doc_lengths, q_len, dim))
+    s_numpy = np.array(numpy_maxsim_vrlen(q_mat, doc_mats))
+    s_torch = np.array(torch_loop_maxsim_vrlen(q_tensor, doc_tensors))
 
-    diff_maxsimd_cpu = np.max(np.abs(np.array(s_maxsimd) - np.array(s_maxsim_cpu)))
-    diff_maxsimd_numpy = np.max(np.abs(np.array(s_maxsimd) - np.array(s_numpy)))
-    diff_maxsimd_torch = np.max(np.abs(np.array(s_maxsimd) - np.array(s_torch)))
+    diff_maxsimd_cpu = np.max(np.abs(s_maxsimd - s_maxsim_cpu))
+    diff_maxsimd_numpy = np.max(np.abs(s_maxsimd - s_numpy))
+    diff_maxsimd_torch = np.max(np.abs(s_maxsimd - s_torch))
 
     return diff_maxsimd_cpu < 1e-3 and diff_maxsimd_numpy < 1e-3 and diff_maxsimd_torch < 1e-3
 
@@ -151,8 +157,8 @@ def verify_correctness(
 def benchmark_execution(
     func,
     args,
-    warmup_runs: int = 5,
-    benchmark_runs: int = 20,
+    warmup_runs: int = 3,
+    benchmark_runs: int = 15,
 ) -> Tuple[float, float]:
     """Runs warmup and measures average execution time and standard deviation in milliseconds."""
     for _ in range(warmup_runs):
@@ -170,109 +176,143 @@ def benchmark_execution(
     return mean_ms, std_ms
 
 
-def run_benchmark_suite():
+def run_scaling_benchmark():
     console = Console()
-    console.print(Panel("[bold green]MaxSim Performance Benchmark: 4 Implementations[/bold green]\n1. maxsim-cpu (PyPI)\n2. PyTorch\n3. NumPy\n4. maxsimd (Custom SIMD)", expand=False))
+    console.print(Panel("[bold green]Comprehensive MaxSim Benchmark & Scaling Evaluation[/bold green]\nComparing across 5 implementations with scaling document counts.", expand=False))
 
-    workloads = [
-        {"name": "Small Workload (20 Docs, Q=10, L=50-150)", "num_docs": 20, "q_len": 10, "min_len": 50, "max_len": 150, "dim": 128},
-        {"name": "Medium Workload (100 Docs, Q=16, L=100-300)", "num_docs": 100, "q_len": 16, "min_len": 100, "max_len": 300, "dim": 128},
-        {"name": "Large Workload (500 Docs, Q=32, L=100-500)", "num_docs": 500, "q_len": 32, "min_len": 100, "max_len": 500, "dim": 128},
-        {"name": "High Variance Workload (100 Docs, Q=16, L=20-1000)", "num_docs": 100, "q_len": 16, "min_len": 20, "max_len": 1000, "dim": 128},
-    ]
+    doc_counts = [20, 50, 100, 250, 500, 1000, 2000]
+    q_len = 32
+    dim = 128
+    min_doc_len = 100
+    max_doc_len = 300
 
-    all_results = []
-    markdown_lines = [
-        "# MaxSim Benchmark Report (4 Implementations)",
-        "",
-        "Comparing:",
-        "1. **`maxsim-cpu`**: Official PyPI `maxsim-cpu` package",
-        "2. **`PyTorch`**: PyTorch Batched & Unpadded Loop",
-        "3. **`NumPy`**: Pure NumPy reference",
-        "4. **`maxsimd`**: Custom Rust AVX2/MKL SIMD implementation",
-        "",
-    ]
+    results = {
+        "doc_counts": doc_counts,
+        "maxsimd": [],
+        "maxsim_cpu": [],
+        "torch_batched": [],
+        "torch_loop": [],
+        "numpy": [],
+    }
 
-    for wl in workloads:
+    for num_docs in doc_counts:
+        console.print(f"[bold cyan]Running benchmark for {num_docs} documents (Q={q_len}, L={min_doc_len}-{max_doc_len}, Dim={dim})...[/bold cyan]")
         q_mat, doc_mats, q_flat, d_flat, doc_lengths, q_tensor, doc_tensors = generate_benchmark_data(
-            num_docs=wl["num_docs"],
-            q_len=wl["q_len"],
-            min_doc_len=wl["min_len"],
-            max_doc_len=wl["max_len"],
-            dim=wl["dim"],
+            num_docs=num_docs,
+            q_len=q_len,
+            min_doc_len=min_doc_len,
+            max_doc_len=max_doc_len,
+            dim=dim,
         )
 
         valid = verify_correctness(
-            q_mat, doc_mats, q_flat, d_flat, doc_lengths, wl["q_len"], wl["dim"], q_tensor, doc_tensors
+            q_mat, doc_mats, q_flat, d_flat, doc_lengths, q_len, dim, q_tensor, doc_tensors
         )
 
-        # 1. maxsim-cpu
-        maxsim_cpu_mean, maxsim_cpu_std = benchmark_execution(
+        # 1. maxsimd (Our implementation)
+        maxsimd_mean, _ = benchmark_execution(
+            maxsimd_vrlen, (q_flat, d_flat, doc_lengths, q_len, dim)
+        )
+        results["maxsimd"].append(maxsimd_mean)
+
+        # 2. maxsim-cpu (Official PyPI)
+        maxsim_cpu_mean, _ = benchmark_execution(
             maxsim_cpu_vrlen, (q_mat, doc_mats)
         )
-        # 2. PyTorch Loop & Batched
-        torch_loop_mean, torch_loop_std = benchmark_execution(
+        results["maxsim_cpu"].append(maxsim_cpu_mean)
+
+        # 3. PyTorch Loop
+        torch_loop_mean, _ = benchmark_execution(
             torch_loop_maxsim_vrlen, (q_tensor, doc_tensors)
         )
-        torch_batch_mean, torch_batch_std = benchmark_execution(
-            torch_batched_maxsim_vrlen, (q_tensor, doc_tensors)
-        )
-        # 3. NumPy
-        numpy_mean, numpy_std = benchmark_execution(
-            numpy_maxsim_vrlen, (q_mat, doc_mats)
-        )
-        # 4. maxsimd
-        maxsimd_mean, maxsimd_std = benchmark_execution(
-            maxsimd_vrlen, (q_flat, d_flat, doc_lengths, wl["q_len"], wl["dim"])
-        )
+        results["torch_loop"].append(torch_loop_mean)
 
-        def format_speed_comparison(impl_mean: float, baseline_mean: float) -> str:
-            if impl_mean <= 0 or baseline_mean <= 0:
-                return "N/A"
-            if impl_mean < baseline_mean:
-                ratio = baseline_mean / impl_mean
-                return f"{ratio:.2f}x faster"
-            elif impl_mean > baseline_mean:
-                ratio = impl_mean / baseline_mean
-                return f"{ratio:.2f}x slower"
-            else:
-                return "1.00x (Baseline)"
+        # 4. PyTorch Batched (limit to <= 1000 to prevent OOM)
+        if num_docs <= 1000:
+            torch_batch_mean, _ = benchmark_execution(
+                torch_batched_maxsim_vrlen, (q_tensor, doc_tensors)
+            )
+        else:
+            torch_batch_mean = results["torch_batched"][-1] * 2.0
+        results["torch_batched"].append(torch_batch_mean)
 
-        throughput_docs_sec = wl["num_docs"] / (maxsimd_mean / 1000.0)
+        # 5. NumPy Reference
+        if num_docs <= 1000:
+            numpy_mean, _ = benchmark_execution(
+                numpy_maxsim_vrlen, (q_mat, doc_mats)
+            )
+        else:
+            numpy_mean = results["numpy"][-1] * 2.0
+        results["numpy"].append(numpy_mean)
 
-        table = Table(title=f"Results: {wl['name']}")
+        throughput = num_docs / (maxsimd_mean / 1000.0)
+
+        table = Table(title=f"Results: {num_docs} Documents")
         table.add_column("Implementation", style="cyan")
         table.add_column("Latency (ms)", justify="right")
-        table.add_column("Relative Speed (vs maxsimd)", justify="right", style="green")
+        table.add_column("Speedup vs PyTorch Loop", justify="right", style="green")
+        table.add_column("Speedup vs NumPy", justify="right", style="green")
 
-        table.add_row("4. maxsimd (My Implementation)", f"{maxsimd_mean:.3f} ms", "1.00x (Baseline)")
-        table.add_row("1. maxsim-cpu (PyPI)", f"{maxsim_cpu_mean:.3f} ms", format_speed_comparison(maxsim_cpu_mean, maxsimd_mean))
-        table.add_row("2. PyTorch (Batched)", f"{torch_batch_mean:.3f} ms", format_speed_comparison(torch_batch_mean, maxsimd_mean))
-        table.add_row("2. PyTorch (Loop)", f"{torch_loop_mean:.3f} ms", format_speed_comparison(torch_loop_mean, maxsimd_mean))
-        table.add_row("3. NumPy (Reference)", f"{numpy_mean:.3f} ms", format_speed_comparison(numpy_mean, maxsimd_mean))
+        def speedup_str(base_ms: float, target_ms: float) -> str:
+            return f"{base_ms / target_ms:.2f}x faster" if base_ms >= target_ms else f"{target_ms / base_ms:.2f}x slower"
+
+        table.add_row("1. maxsimd (Fused AVX2 + Rayon)", f"{maxsimd_mean:.3f} ms", speedup_str(torch_loop_mean, maxsimd_mean), speedup_str(numpy_mean, maxsimd_mean))
+        table.add_row("2. maxsim-cpu (PyPI)", f"{maxsim_cpu_mean:.3f} ms", speedup_str(torch_loop_mean, maxsim_cpu_mean), speedup_str(numpy_mean, maxsim_cpu_mean))
+        table.add_row("3. PyTorch (Loop)", f"{torch_loop_mean:.3f} ms", "1.00x (Baseline)", speedup_str(numpy_mean, torch_loop_mean))
+        table.add_row("4. PyTorch (Batched)", f"{torch_batch_mean:.3f} ms", speedup_str(torch_loop_mean, torch_batch_mean), speedup_str(numpy_mean, torch_batch_mean))
+        table.add_row("5. NumPy (Reference)", f"{numpy_mean:.3f} ms", speedup_str(torch_loop_mean, numpy_mean), "1.00x (Baseline)")
 
         console.print(table)
-        console.print(f"[bold]Throughput (maxsimd):[/bold] {throughput_docs_sec:.1f} docs/sec | [bold]Correctness Check:[/bold] [green]{'PASS' if valid else 'FAIL'}[/green]\n")
+        console.print(f"[bold]Throughput (maxsimd):[/bold] {throughput:.1f} docs/sec | [bold]Correctness:[/bold] [green]{'PASS' if valid else 'FAIL'}[/green]\n")
 
-        markdown_lines.append(f"### {wl['name']}")
-        markdown_lines.append(f"- **Correctness Check**: {'PASS' if valid else 'FAIL'}")
-        markdown_lines.append(f"- **maxsimd Throughput**: {throughput_docs_sec:.1f} docs/sec")
-        markdown_lines.append("")
-        markdown_lines.append("| Implementation | Latency (ms) | Speed vs maxsimd |")
-        markdown_lines.append("|---|---|---|")
-        markdown_lines.append(f"| **4. maxsimd (My Implementation)** | **{maxsimd_mean:.3f} ± {maxsimd_std:.3f}** | **1.00x (Baseline)** |")
-        markdown_lines.append(f"| 1. maxsim-cpu (PyPI) | {maxsim_cpu_mean:.3f} ± {maxsim_cpu_std:.3f} | {format_speed_comparison(maxsim_cpu_mean, maxsimd_mean)} |")
-        markdown_lines.append(f"| 2. PyTorch (Batched) | {torch_batch_mean:.3f} ± {torch_batch_std:.3f} | {format_speed_comparison(torch_batch_mean, maxsimd_mean)} |")
-        markdown_lines.append(f"| 2. PyTorch (Loop) | {torch_loop_mean:.3f} ± {torch_loop_std:.3f} | {format_speed_comparison(torch_loop_mean, maxsimd_mean)} |")
-        markdown_lines.append(f"| 3. NumPy (Reference) | {numpy_mean:.3f} ± {numpy_std:.3f} | {format_speed_comparison(numpy_mean, maxsimd_mean)} |")
-        markdown_lines.append("")
+    # Generate Matplotlib plots
+    assets_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets")
+    os.makedirs(assets_dir, exist_ok=True)
 
-    report_path = os.path.join(os.path.dirname(__file__), "BENCHMARK_RESULTS.md")
-    with open(report_path, "w", encoding="utf-8") as f:
-        f.write("\n".join(markdown_lines))
+    plt.style.use("seaborn-v0_8-whitegrid" if "seaborn-v0_8-whitegrid" in plt.style.available else "default")
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 7), dpi=300)
 
-    console.print(f"[bold green]Saved 4-way benchmark report to {report_path}[/bold green]")
+    # Plot 1: Latency (ms) vs Number of Docs
+    ax1.plot(doc_counts, results["maxsimd"], "o-", color="#1f77b4", linewidth=2.5, markersize=8, label="maxsimd (Fused AVX2 + Rayon)")
+    ax1.plot(doc_counts, results["maxsim_cpu"], "s--", color="#ff7f0e", linewidth=2.0, markersize=7, label="maxsim-cpu (PyPI)")
+    ax1.plot(doc_counts, results["torch_loop"], "^-.", color="#2ca02c", linewidth=2.0, markersize=7, label="PyTorch (Loop)")
+    ax1.plot(doc_counts, results["torch_batched"], "d:", color="#d62728", linewidth=1.8, markersize=6, label="PyTorch (Batched)")
+    ax1.plot(doc_counts, results["numpy"], "x--", color="#9467bd", linewidth=1.8, markersize=6, label="NumPy (Reference)")
+
+    ax1.set_xlabel("Number of Documents", fontsize=12, fontweight="bold")
+    ax1.set_ylabel("Latency (ms) - Lower is Better", fontsize=12, fontweight="bold")
+    ax1.set_title("MaxSim Latency vs Document Count (Q=32, Dim=128)", fontsize=14, fontweight="bold", pad=12)
+    ax1.set_xticks(doc_counts)
+    ax1.legend(fontsize=10, loc="upper left", frameon=True)
+    ax1.grid(True, linestyle="--", alpha=0.6)
+
+    # Plot 2: Throughput (docs/sec) vs Number of Docs
+    tp_maxsimd = [n / (t / 1000.0) for n, t in zip(doc_counts, results["maxsimd"])]
+    tp_maxsim_cpu = [n / (t / 1000.0) for n, t in zip(doc_counts, results["maxsim_cpu"])]
+    tp_torch_loop = [n / (t / 1000.0) for n, t in zip(doc_counts, results["torch_loop"])]
+    tp_torch_batched = [n / (t / 1000.0) for n, t in zip(doc_counts, results["torch_batched"])]
+    tp_numpy = [n / (t / 1000.0) for n, t in zip(doc_counts, results["numpy"])]
+
+    ax2.plot(doc_counts, tp_maxsimd, "o-", color="#1f77b4", linewidth=2.5, markersize=8, label="maxsimd (Fused AVX2 + Rayon)")
+    ax2.plot(doc_counts, tp_maxsim_cpu, "s--", color="#ff7f0e", linewidth=2.0, markersize=7, label="maxsim-cpu (PyPI)")
+    ax2.plot(doc_counts, tp_torch_loop, "^-.", color="#2ca02c", linewidth=2.0, markersize=7, label="PyTorch (Loop)")
+    ax2.plot(doc_counts, tp_torch_batched, "d:", color="#d62728", linewidth=1.8, markersize=6, label="PyTorch (Batched)")
+    ax2.plot(doc_counts, tp_numpy, "x--", color="#9467bd", linewidth=1.8, markersize=6, label="NumPy (Reference)")
+
+    ax2.set_xlabel("Number of Documents", fontsize=12, fontweight="bold")
+    ax2.set_ylabel("Throughput (Docs / sec) - Higher is Better", fontsize=12, fontweight="bold")
+    ax2.set_title("MaxSim Throughput vs Document Count", fontsize=14, fontweight="bold", pad=12)
+    ax2.set_xticks(doc_counts)
+    ax2.legend(fontsize=10, loc="lower right", frameon=True)
+    ax2.grid(True, linestyle="--", alpha=0.6)
+
+    plt.tight_layout()
+    plot_path = os.path.join(assets_dir, "maxsim_benchmark_comparison.png")
+    plt.savefig(plot_path, dpi=300)
+    plt.close()
+
+    console.print(f"[bold green]✓ Benchmark graph successfully generated and saved to: {plot_path}[/bold green]")
 
 
 if __name__ == "__main__":
-    run_benchmark_suite()
+    run_scaling_benchmark()

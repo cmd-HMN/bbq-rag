@@ -15,6 +15,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+
+//TODO
+// REmove the unused functions
 pub mod function {
     use crate::cpu::vec256::simd::max_avx2;
     use rayon::prelude::*;
@@ -77,37 +80,17 @@ pub mod function {
     }
 
     pub fn pro_sgl_doc(_q: &[f32], _d: &[f32], _q_len: usize, _d_len: usize, _dim: usize) -> f32 {
-        #[cfg(all(target_arch = "x86_64", feature = "mkl"))]
-        {
-            return generic_gpro_sgl_doc(
-                _q,
-                _d,
-                _q_len,
-                _d_len,
-                _dim,
-                |transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc| unsafe {
-                    msgemm(transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc)
-                },
-            );
-        }
-
-        #[cfg(not(all(target_arch = "x86_64", feature = "mkl")))]
-        {
-            return generic_gpro_sgl_doc(
-                _q,
-                _d,
-                _q_len,
-                _d_len,
-                _dim,
-                |transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc| {
-                    unsafe { csgemm(transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc) }
-                },
-            );
+        if _dim == 128 {
+            unsafe { crate::cpu::vec256::simd::fused_dot_max_dim128_avx2(_q, _d, _q_len, _d_len) }
+        } else {
+            unsafe { crate::cpu::vec256::simd::fused_dot_max_generic_avx2(_q, _d, _q_len, _d_len, _dim) }
         }
     }
 
     pub mod internal {
-        use crate::func::function::{generic_gpro_sgl_doc, csgemm, msgemm};
+        use crate::func::function::{generic_gpro_sgl_doc, csgemm};
+        #[cfg(all(target_arch = "x86_64", feature = "mkl"))]
+        use crate::func::function::msgemm;
 
         pub fn pro_sgl_doc_csgemm(
             _q: &[f32],
@@ -115,26 +98,27 @@ pub mod function {
             _q_len: usize,
             _d_len: usize,
             _dim: usize,
-        ) -> f32{
+        ) -> f32 {
             generic_gpro_sgl_doc(
                 _q,
                 _d,
                 _q_len,
                 _d_len,
                 _dim,
-                |transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc| unsafe {
+                |transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc| {
                     csgemm(transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc)
                 },
-                )
+            )
         }
 
+        #[cfg(all(target_arch = "x86_64", feature = "mkl"))]
         pub fn pro_sgl_doc_msgemm(
             _q: &[f32],
             _d: &[f32],
             _q_len: usize,
             _d_len: usize,
             _dim: usize,
-        ) -> f32{
+        ) -> f32 {
             generic_gpro_sgl_doc(
                 _q,
                 _d,
@@ -144,48 +128,7 @@ pub mod function {
                 |transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc| unsafe {
                     msgemm(transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc)
                 },
-                )
-        }
-    }
-    #[inline(always)]
-    fn pro_bth(
-        _q: &[f32],
-        _d: &[(usize, usize, &[f32])],
-        _q_len: usize,
-        _dim: usize,
-        _bth_idx: &[usize], // [batch_start, batch_end] -> bathc size
-        _max_len: usize,
-        _results: &mut [f32],
-    ) {
-        let bth_size = _bth_idx.len();
-
-        let bth_result = BBUFFER.with(|buffer| {
-            let mut buff = buffer.borrow_mut();
-
-            let req = bth_size * _max_len * _dim;
-            buff.resize(req, 0.0);
-
-            for (batch_idx, &sorted_idx) in _bth_idx.iter().enumerate() {
-                let (_, doc_len, doc_data) = &_d[sorted_idx];
-                let src_size = doc_len * _dim;
-                let dst_offset = batch_idx * _max_len * _dim;
-
-                // Copy actual data
-                buff[dst_offset..dst_offset + src_size].copy_from_slice(&doc_data[..src_size]);
-
-                // Clear only the padding area
-                if *doc_len < _max_len {
-                    let padding_start = dst_offset + src_size;
-                    let padding_end = dst_offset + _max_len * _dim;
-                    buff[padding_start..padding_end].fill(0.0);
-                }
-            }
-
-            maxsim_fused_doc_tiles(&_q, &buff[..req], _q_len, _max_len, _dim)
-        });
-
-        for (batch_idx, &sorted_idx) in _bth_idx.iter().enumerate() {
-            _results[sorted_idx] = bth_result[batch_idx];
+            )
         }
     }
 
@@ -197,67 +140,71 @@ pub mod function {
         _dim: usize,
     ) -> Vec<f32> {
         let n_docs = _d.len() / (_d_len * _dim);
-        let mut _results = vec![0.0f32; n_docs];
+        (0..n_docs)
+            .into_par_iter()
+            .map(|doc_idx| {
+                let start = doc_idx * _d_len * _dim;
+                let doc_data = &_d[start..start + _d_len * _dim];
+                pro_sgl_doc(_q, doc_data, _q_len, _d_len, _dim)
+            })
+            .collect()
+    }
 
-        let _doc_tile_size = match _d_len {
-            512 => 128,
-            1024 => 64,
-            2048 => 32,
-            4096 => 16,
-            _ => 32,
-        };
-
-        for _doc_tile_start in (0..n_docs).step_by(_doc_tile_size) {
-            let _doc_tile_end = (_doc_tile_start + _doc_tile_size).min(n_docs);
-            let _tile_docs = _doc_tile_end - _doc_tile_start;
-            let _tile_tokens = _tile_docs * _d_len;
-
-            let mut tile_sims = vec![0.0f32; _q_len * _tile_tokens];
-            let tile_d_start = _doc_tile_start * _d_len * _dim;
-            let tile_d_end = _doc_tile_end * _d_len * _dim;
-            let tile_d = &_d[tile_d_start..tile_d_end];
-
-            unsafe {
-                csgemm(
-                    b'T',
-                    b'N',
-                    _tile_tokens as i32,
-                    _q_len as i32,
-                    _dim as i32,
-                    1.0,
-                    tile_d,
-                    _dim as i32,
-                    _q,
-                    _dim as i32,
-                    0.0,
-                    &mut tile_sims,
-                    _tile_tokens as i32,
-                );
-            }
-
-            let tile_results: Vec<f32> = (0.._tile_docs)
-                .into_par_iter()
-                .map(|tile_doc_idx| {
-                    let doc_start = tile_doc_idx * _d_len;
-                    let mut score = 0.0f32;
-
-                    for qi in 0.._q_len {
-                        let base_idx = doc_start + qi * _tile_tokens;
-                        let doc_sims = &tile_sims[base_idx..base_idx + _d_len];
-                        let max_val = max_avx2(doc_sims);
-                        score += max_val;
-                    }
-
-                    score
-                })
-                .collect();
-
-            for (i, &score) in tile_results.iter().enumerate() {
-                _results[_doc_tile_start + i] = score;
-            }
+    /// Zero-copy, high-performance variable-length MaxSim evaluation across document slices.
+    pub fn maxsim_variable_length_slice(
+        q: &[f32],
+        d_flat: &[f32],
+        doc_lengths: &[usize],
+        q_len: usize,
+        dim: usize,
+    ) -> Vec<f32> {
+        let n_docs = doc_lengths.len();
+        if n_docs == 0 {
+            return Vec::new();
         }
 
-        _results
+        let mut offsets = Vec::with_capacity(n_docs);
+        let mut curr_offset = 0;
+        for &doc_len in doc_lengths {
+            offsets.push((curr_offset, doc_len));
+            curr_offset += doc_len * dim;
+        }
+
+        if n_docs <= 24 {
+            let mut results = Vec::with_capacity(n_docs);
+            if dim == 128 {
+                for (offset, doc_len) in offsets {
+                    let doc_data = &d_flat[offset..offset + doc_len * 128];
+                    let score = unsafe { crate::cpu::vec256::simd::fused_dot_max_dim128_avx2(q, doc_data, q_len, doc_len) };
+                    results.push(score);
+                }
+            } else {
+                for (offset, doc_len) in offsets {
+                    let doc_data = &d_flat[offset..offset + doc_len * dim];
+                    let score = unsafe { crate::cpu::vec256::simd::fused_dot_max_generic_avx2(q, doc_data, q_len, doc_len, dim) };
+                    results.push(score);
+                }
+            }
+            results
+        } else if dim == 128 {
+            offsets
+                .into_par_iter()
+                .with_min_len(8)
+                .map(|(offset, doc_len)| {
+                    let doc_data = &d_flat[offset..offset + doc_len * 128];
+                    unsafe { crate::cpu::vec256::simd::fused_dot_max_dim128_avx2(q, doc_data, q_len, doc_len) }
+                })
+                .collect()
+        } else {
+            offsets
+                .into_par_iter()
+                .with_min_len(8)
+                .map(|(offset, doc_len)| {
+                    let doc_data = &d_flat[offset..offset + doc_len * dim];
+                    unsafe { crate::cpu::vec256::simd::fused_dot_max_generic_avx2(q, doc_data, q_len, doc_len, dim) }
+                })
+                .collect()
+        }
     }
 
     pub fn maxsim_variable_length(
@@ -267,85 +214,26 @@ pub mod function {
         _dim: usize,
     ) -> Vec<f32> {
         let n_docs = _d.len();
+        if n_docs == 0 {
+            return Vec::new();
+        }
+
         let mut results = vec![0.0f32; n_docs];
-
-        // Fast path: if all documents have similar lengths, process in one batch
-        let (min_len, max_len) = _d
-            .iter()
-            .map(|(_, len, _)| *len)
-            .fold((usize::MAX, 0), |(min, max), len| {
-                (min.min(len), max.max(len))
-            });
-
-        if max_len as f32 / min_len as f32 <= 1.2 && n_docs >= 50 {
-            let all_indices: Vec<usize> = (0..n_docs).collect();
-            pro_bth(_q, &_d, _q_len, _dim, &all_indices, max_len, &mut results);
-            return results;
-        }
-
-        // Sort documents by length for better batching
-        let mut sorted_indices: Vec<usize> = (0..n_docs).collect();
-        sorted_indices.sort_by_key(|&i| _d[i].1);
-
-        // Process in larger batches with adaptive sizing
-        let target_batch_size = 128; // Larger batches for better GEMM efficiency
-        let mut i = 0;
-
-        while i < n_docs {
-            // Find batch end - include docs within 20% length difference
-            let base_len = _d[sorted_indices[i]].1;
-            let max_acceptable_len = (base_len as f32 * 1.2) as usize;
-
-            let mut batch_end = i + 1;
-            while batch_end < n_docs && batch_end < i + target_batch_size {
-                if _d[sorted_indices[batch_end]].1 > max_acceptable_len {
-                    break;
-                }
-                batch_end += 1;
-            }
-
-            let batch_size = batch_end - i;
-            let current_indices = &sorted_indices[i..batch_end];
-
-            if batch_size == 1 {
-                // Single document
-                let idx = sorted_indices[i];
-                let (doc_idx, doc_len, doc_data) = &_d[idx];
-                results[*doc_idx] = pro_sgl_doc(_q, doc_data, _q_len, *doc_len, _dim);
-            } else {
-                // Large batch - worth the overhead of batched processing
-                // Check if all documents in batch have exactly the same length
-                let first_len = _d[sorted_indices[i]].1;
-                let all_same_length = sorted_indices[i..batch_end]
-                    .iter()
-                    .all(|&idx| _d[idx].1 == first_len);
-
-                if all_same_length {
-                    pro_bth(
-                        _q,
-                        &_d,
-                        _q_len,
-                        _dim,
-                        current_indices,
-                        first_len,
-                        &mut results,
-                    );
+        let scores: Vec<(usize, f32)> = _d
+            .into_par_iter()
+            .map(|(doc_idx, doc_len, doc_data)| {
+                let score = if _dim == 128 {
+                    unsafe { crate::cpu::vec256::simd::fused_dot_max_dim128_avx2(_q, doc_data, _q_len, doc_len) }
                 } else {
-                    let chunk_max_len = current_indices.iter().map(|&idx| _d[idx].1).max().unwrap();
-                    pro_bth(
-                        _q,
-                        &_d,
-                        _q_len,
-                        _dim,
-                        current_indices,
-                        chunk_max_len,
-                        &mut results,
-                    );
-                }
-            }
-            i = batch_end;
-        }
+                    unsafe { crate::cpu::vec256::simd::fused_dot_max_generic_avx2(_q, doc_data, _q_len, doc_len, _dim) }
+                };
+                (doc_idx, score)
+            })
+            .collect();
 
+        for (doc_idx, score) in scores {
+            results[doc_idx] = score;
+        }
         results
     }
 }

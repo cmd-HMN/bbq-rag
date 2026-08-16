@@ -22,7 +22,7 @@ def query_indexed_documents(
 
     import numpy as np
     import torch
-    from maxsimd import maxsim_vrlen
+    from maxsimd import maxsim
 
     records = tracker.fetch_all_records()
     completed_records = [r for r in records if r.get("status") == "done" and r.get("embedding_path")]
@@ -31,12 +31,9 @@ def query_indexed_documents(
         logger.info("No completed PDF embeddings found in tracker database.")
         return []
 
-    # Encode query: shape [1, q_len, dim]
+    # Encode query: shape [1, q_len, dim] -> [q_len, dim]
     q_tensor: torch.Tensor = engine.encode_query_text_inputs([query_text])
-    q_flat = q_tensor[0].cpu().float().numpy()
-    q_len = q_flat.shape[0]
-    dim = q_flat.shape[1]
-    q_flat_1d = np.ascontiguousarray(q_flat.reshape(-1), dtype=np.float32)
+    q_mat = q_tensor[0].cpu().float().numpy()
 
     all_page_results = []
 
@@ -46,15 +43,11 @@ def query_indexed_documents(
             continue
 
         doc_emb = np.load(emb_path)
-        num_pages = record.get("num_pages", 1)
+
+        scores = maxsim(q_mat, doc_emb)
 
         if doc_emb.ndim == 3:
             num_pages = doc_emb.shape[0]
-            tokens_per_page = doc_emb.shape[1]
-            page_lengths = [tokens_per_page] * num_pages
-            d_flat_1d = np.ascontiguousarray(doc_emb.reshape(-1), dtype=np.float32)
-
-            scores = maxsim_vrlen(q_flat_1d, d_flat_1d, page_lengths, q_len, dim)
             for page_idx, score in enumerate(scores):
                 all_page_results.append(
                     {
@@ -66,10 +59,7 @@ def query_indexed_documents(
                         "total_pages": num_pages,
                     }
                 )
-        elif doc_emb.ndim == 2:
-            tokens = doc_emb.shape[0]
-            d_flat_1d = np.ascontiguousarray(doc_emb.reshape(-1), dtype=np.float32)
-            scores = maxsim_vrlen(q_flat_1d, d_flat_1d, [tokens], q_len, dim)
+        else:
             all_page_results.append(
                 {
                     "score": float(scores[0]),
