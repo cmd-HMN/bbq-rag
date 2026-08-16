@@ -19,40 +19,65 @@ def run_server_command(args: argparse.Namespace) -> None:
 
 
 def run_client_query_command(args: argparse.Namespace) -> None:
-    """Launches a client query against the running server."""
+    """Launches a client query against the running server with optional Gemini multimodal RAG."""
     from bbq.src.client import BBQClient
+    from bbq.src.config import load_configuration_from_yaml_file
 
     log_level = logging.INFO if args.verbose else logging.WARNING
     logging.basicConfig(level=log_level, format="[%(asctime)s] [%(levelname)s] [%(name)s]: %(message)s")
 
-    client = BBQClient(server_url=args.server)
+    # Load configuration from config.py / config.yaml
+    config = load_configuration_from_yaml_file(config_filepath=args.config)
+
+    top_k = args.top_k if args.top_k is not None else config.rag_top_k
+    gemini_key = args.gemini_api_key or config.gemini_api_key
+    gemini_model = args.gemini_model or config.gemini_model
+
+    client = BBQClient(server_url=args.server, config=config)
     try:
-        print(f"Sending query to {args.server}: '{args.query}' (top_k={args.top_k})...\n")
-        results = client.query(query_text=args.query, top_k=args.top_k)
+        print(f"Sending query to {args.server}: '{args.query}' (top_k={top_k})...\n")
+
+        # Execute unified query + multimodal answer generation
+        rag_response = client.query_and_answer(
+            query_text=args.query,
+            top_k=top_k,
+            gemini_api_key=gemini_key,
+            gemini_model=gemini_model,
+            save_images=args.save_images,
+        )
+
+        results = rag_response.get("sources", [])
+        answer = rag_response.get("answer")
+        status = rag_response.get("status")
 
         if not results:
             print("No matching PDF pages found.")
             return
 
-        print(f"Top {len(results)} Matching PDF Parts:\n" + "=" * 60)
+        # 1. If Gemini generated an answer, display it prominently
+        if answer:
+            print("=" * 60)
+            print(f"GEMINI MULTIMODAL ANSWER ({rag_response.get('engine', 'gemini')}):")
+            print("=" * 60)
+            print(answer)
+            print("\n" + "=" * 60)
+            print(f"GROUNDED RETRIEVED SOURCES (Top {len(results)} Pages):")
+            print("=" * 60)
+        else:
+            if status == "fallback_pages_only":
+                reason = rag_response.get("fallback_reason", "No API key or API call failed")
+                print(f"[Note: {reason}]")
+            print(f"Top {len(results)} Matching PDF Pages (Book Results):\n" + "=" * 60)
+
+        # 2. Display the retrieved book pages
         for i, res in enumerate(results, 1):
             print(f"Rank {i}:")
             print(f"  Score       : {res['score']:.4f}")
             print(f"  PDF File    : {res['file_path']}")
             print(f"  Page        : Page {res['page_number']} of {res['total_pages']}")
             print(f"  File Hash   : {res['file_hash'][:12]}")
-
-            if args.save_images:
-                out_img_path = f"retrieved_rank_{i}_page_{res['page_number']}.png"
-                try:
-                    client.get_page_image(
-                        file_path=res["file_path"],
-                        page_number=res["page_number"],
-                        save_path=out_img_path,
-                    )
-                except Exception as img_err:
-                    print(f"  [Failed to fetch page image from server: {img_err}]")
-
+            if res.get("saved_image_path"):
+                print(f"  Saved Image : {res['saved_image_path']}")
             print("-" * 60)
 
     except Exception as err:
@@ -117,10 +142,19 @@ def build_argument_parser() -> argparse.ArgumentParser:
     server_parser.set_defaults(func=run_server_command)
 
     # --- Query / Client Command ---
-    query_parser = subparsers.add_parser("query", help="Query indexed documents via client API")
+    query_parser = subparsers.add_parser("query", help="Query indexed documents via client API with optional Gemini RAG")
     query_parser.add_argument("query", type=str, help="Search query text string")
-    query_parser.add_argument("--server", "-s", type=str, default="http://localhost:8000", help="Server URL")
-    query_parser.add_argument("--top-k", "-k", type=int, default=5, help="Top K results to retrieve")
+    query_parser.add_argument(
+        "--config", "-c", type=str, default="config.yaml", help="Path to YAML config file (default: config.yaml)"
+    )
+    query_parser.add_argument("--server", "-s", type=str, default="http://localhost:8000", help="Server URL (default: http://localhost:8000)")
+    query_parser.add_argument("--top-k", "-k", type=int, default=None, help="Top K results to retrieve (default from config: 3)")
+    query_parser.add_argument(
+        "--gemini-api-key", "-g", type=str, default=None, help="Google Gemini API key (or set in config.yaml / GEMINI_API_KEY env var)"
+    )
+    query_parser.add_argument(
+        "--gemini-model", type=str, default=None, help="Gemini model name (default from config: gemini-1.5-flash)"
+    )
     query_parser.add_argument("--save-images", "-i", action="store_true", help="Save page images to disk")
     query_parser.add_argument("--verbose", "-v", action="store_true", help="Enable verbose client debug logging")
     query_parser.set_defaults(func=run_client_query_command)

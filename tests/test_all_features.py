@@ -28,9 +28,36 @@ def test_system_cache_path():
     config = ModelConfigWrapper()
     assert config.embeddings_output_path == get_system_cache_dir("embeddings")
     assert config.sqlite_db_path == get_system_cache_dir("tracker.db")
+    assert config.gemini_model == "gemini-1.5-flash"
+    assert config.rag_top_k == 3
 
     tracker = SqlliteDB()
     assert tracker.db_filepath == get_system_cache_dir("tracker.db")
+
+
+def test_config_gemini_settings_and_client():
+    """Verify Gemini configuration in ModelConfigWrapper and client initialization."""
+    from bbq.src.config import load_configuration_from_yaml_file
+
+    config = ModelConfigWrapper(
+        gemini_api_key="TEST_API_KEY_ABC",
+        gemini_model="gemini-2.0-flash",
+        rag_top_k=3,
+    )
+    assert config.gemini_api_key == "TEST_API_KEY_ABC"
+    assert config.gemini_model == "gemini-2.0-flash"
+    assert config.rag_top_k == 3
+
+    dict_format = config.convert_to_dictionary_format()
+    assert dict_format["gemini_api_key_configured"] is True
+    assert dict_format["gemini_model"] == "gemini-2.0-flash"
+    assert dict_format["rag_top_k"] == 3
+
+    gemini_client = config.get_gemini_client()
+    assert gemini_client.api_key == "TEST_API_KEY_ABC"
+    assert gemini_client.model == "gemini-2.0-flash"
+    assert gemini_client.is_available() is True
+
 
 
 def test_maxsim_vrlen_functionality():
@@ -141,5 +168,31 @@ def test_single_page_image_extraction():
         assert pil_img.width > 0 and pil_img.height > 0
     finally:
         shutil.rmtree(temp_dir)
+
+
+def test_gemini_client_and_fallback():
+    """Verify GeminiClient behavior with no key, invalid key, and image encoding."""
+    from bbq.src.client.gemini import GeminiClient
+    from PIL import Image
+
+    # 1. No key
+    client_no_key = GeminiClient(api_key="")
+    assert not client_no_key.is_available()
+    img = Image.new("RGB", (64, 64), color="red")
+    answer = client_no_key.generate_answer("What is this?", [img])
+    assert answer is None
+
+    # 2. Image encoding part
+    part = GeminiClient._image_to_base64_part(img)
+    assert "inlineData" in part
+    assert part["inlineData"]["mimeType"] == "image/jpeg"
+    assert len(part["inlineData"]["data"]) > 0
+
+    # 3. Invalid key should gracefully return None without raising unhandled exceptions
+    client_invalid = GeminiClient(api_key="INVALID_TEST_KEY_12345", timeout=5)
+    assert client_invalid.is_available()
+    answer_invalid = client_invalid.generate_answer("Test question", [img])
+    assert answer_invalid is None
+
 
 

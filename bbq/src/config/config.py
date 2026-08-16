@@ -45,6 +45,9 @@ class ModelConfigWrapper:
         embeddings_output_path: Optional[str] = None,
         sqlite_db_path: Optional[str] = None,
         pdf_render_dpi: int = 150,
+        gemini_api_key: Optional[str] = None,
+        gemini_model: str = "gemini-1.5-flash",
+        rag_top_k: int = 3,
     ) -> None:
         self.base_model_id: str = base_model_id
         self.lora_adapter_id: str = lora_adapter_id
@@ -57,6 +60,20 @@ class ModelConfigWrapper:
         self.embeddings_output_path: str = embeddings_output_path or get_system_cache_dir("embeddings")
         self.sqlite_db_path: str = sqlite_db_path or get_system_cache_dir("tracker.db")
         self.pdf_render_dpi: int = pdf_render_dpi
+        self.gemini_api_key: Optional[str] = (
+            gemini_api_key
+            or os.environ.get("GEMINI_API_KEY")
+            or os.environ.get("GOOGLE_API_KEY")
+        )
+        self.gemini_model: str = gemini_model
+        self.rag_top_k: int = rag_top_k
+
+    def get_gemini_client(self):
+        """
+        Instantiates and returns a GeminiClient configured with this config's settings.
+        """
+        from bbq.src.client.gemini import GeminiClient
+        return GeminiClient(api_key=self.gemini_api_key, model=self.gemini_model)
 
     def format_visual_prompt_prefix(self) -> str:
         """
@@ -83,6 +100,9 @@ class ModelConfigWrapper:
             "embeddings_output_path": self.embeddings_output_path,
             "sqlite_db_path": self.sqlite_db_path,
             "pdf_render_dpi": self.pdf_render_dpi,
+            "gemini_api_key_configured": bool(self.gemini_api_key and self.gemini_api_key.strip()),
+            "gemini_model": self.gemini_model,
+            "rag_top_k": self.rag_top_k,
         }
 
 def load_configuration_from_yaml_file(
@@ -154,6 +174,15 @@ def load_configuration_from_yaml_file(
     
     pdf_render_dpi: int = int(parsed_yaml_data.get("pdf_render_dpi", 150))
 
+    gemini_api_key: Optional[str] = parsed_yaml_data.get("gemini_api_key")
+    if gemini_api_key is not None:
+        gemini_api_key = str(gemini_api_key).strip() or None
+    else:
+        gemini_api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+
+    gemini_model: str = str(parsed_yaml_data.get("gemini_model", "gemini-1.5-flash"))
+    rag_top_k: int = int(parsed_yaml_data.get("rag_top_k", 3))
+
     if not base_model_id:
         raise ValueError("base_model_id cannot be empty in configuration.")
 
@@ -169,6 +198,9 @@ def load_configuration_from_yaml_file(
         embeddings_output_path=embeddings_output_path,
         sqlite_db_path=sqlite_db_path,
         pdf_render_dpi=pdf_render_dpi,
+        gemini_api_key=gemini_api_key,
+        gemini_model=gemini_model,
+        rag_top_k=rag_top_k,
     )
 
 def determine_target_torch_device(device_preference: str = "auto") -> str:

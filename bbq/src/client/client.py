@@ -15,11 +15,17 @@ logger = logging.getLogger("bbq.client")
 
 class BBQClient:
     """
-    Client for querying the running ColPali RAG indexing server and fetching page images.
+    Client for querying the running ColPali RAG indexing server, generating Gemini multimodal answers,
+    and fetching/saving page images.
     """
 
-    def __init__(self, server_url: str = "http://localhost:8000") -> None:
+    def __init__(
+        self,
+        server_url: str = "http://localhost:8000",
+        config: Optional[Any] = None,
+    ) -> None:
         self.server_url: str = server_url.rstrip("/")
+        self.config = config
 
     def get_status(self) -> Dict[str, Any]:
         """Retrieves server status information."""
@@ -42,13 +48,13 @@ class BBQClient:
         logger.info(f"Retrieved {len(docs)} document record(s) in {elapsed:.3f}s")
         return docs
 
-    def query(self, query_text: str, top_k: int = 5) -> List[Dict[str, Any]]:
+    def query(self, query_text: str, top_k: int = 3) -> List[Dict[str, Any]]:
         """
         Sends a retrieval query to the server and returns the top matching PDF page results.
 
         Args:
             query_text (str): Search text query.
-            top_k (int): Number of top matching PDF pages to retrieve.
+            top_k (int): Number of top matching PDF pages to retrieve (default: 3).
 
         Returns:
             List[Dict[str, Any]]: List of matching results containing score, file_path, page_number, etc.
@@ -63,6 +69,138 @@ class BBQClient:
         results = data.get("results", [])
         logger.info(f"Query completed in {elapsed:.3f}s (HTTP {response.status_code}): received {len(results)} match(es)")
         return results
+
+    def query_and_answer(
+        self,
+        query_text: str,
+        top_k: int = 3,
+        gemini_api_key: Optional[str] = None,
+        gemini_model: str = "gemini-1.5-flash",
+        save_images: bool = False,
+        images_output_dir: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Retrieves top_k relevant pages (default: 3) and uses Google Gemini to generate
+        a grounded answer from the page images. If no API key is given or Gemini fails,
+        gracefully returns the retrieved pages.
+
+        Args:
+            query_text (str): The search query / question.
+            top_k (int): Number of top pages to retrieve (default: 3).
+            gemini_api_key (Optional[str]): Gemini API key. If omitted, uses GEMINI_API_KEY env.
+            gemini_model (str): Gemini model name (default: 'gemini-1.5-flash' free-tier default).
+            save_images (bool): Whether to save retrieved page images locally.
+            images_output_dir (Optional[str]): Directory to save page images if save_images is True.
+
+        Returns:
+            Dict[str, Any]: Dictionary containing 'query', 'answer', 'sources', 'status', and 'engine'.
+        """
+        from bbq.src.client.gemini import GeminiClient
+
+        # 1. Retrieve top-k matching pages
+        results = self.query(query_text=query_text, top_k=top_k)
+        if not results:
+            return {
+                "query": query_text,
+                "answer": None,
+                "sources": [],
+                "status": "no_results",
+                "engine": "none",
+                "message": "No matching document pages found for query.",
+            }
+
+        # 2. Fetch page images for top retrieved matches
+        page_images: List[Image.Image] = []
+        for i, res in enumerate(results, 1):
+            img = None
+            save_path = None
+            if save_images:
+                out_dir = images_output_dir or "."
+                os.makedirs(out_dir, exist_ok=True)
+                save_path = os.path.join(out_dir, f"retrieved_rank_{i}_page_{res['page_number']}.png")
+
+            try:
+                img = self.get_page_image(
+                    file_path=res["file_path"],
+                    page_number=res["page_number"],
+                    save_path=save_path,
+                )
+            except Exception as e:
+                logger.warning(f"Could not fetch server page image for {res['file_path']} page {res['page_number']}: {e}")
+                # Fallback to local rendering if file exists locally
+                if os.path.exists(res["file_path"]):
+                    try:
+                        img = get_local_pdf_page_image(
+                            file_path=res["file_path"],
+                            page_number=res["page_number"],
+                            save_path=save_path,
+                        )
+                    except Exception as local_err:
+                        logger.warning(f"Local PDF render failed: {local_err}")
+
+            if img is not None:
+                page_images.append(img)
+                res["image_available"] = True
+                if save_path:
+                    res["saved_image_path"] = save_path
+            else:
+                res["image_available"] = False
+
+        # Pull defaults from config if available
+        if self.config is not None:
+            if gemini_api_key is None and hasattr(self.config, "gemini_api_key"):
+                gemini_api_key = self.config.gemini_api_key
+            if gemini_model == "gemini-1.5-flash" and hasattr(self.config, "gemini_model"):
+                gemini_model = self.config.gemini_model
+
+        # 3. Check Gemini API client availability
+        gemini = GeminiClient(api_key=gemini_api_key, model=gemini_model)
+
+        if not gemini.is_available():
+            logger.info("No Gemini API key provided. Returning retrieved pages only.")
+            return {
+                "query": query_text,
+                "answer": None,
+                "sources": results,
+                "status": "fallback_pages_only",
+                "engine": "retrieval_only",
+                "fallback_reason": "No Gemini API key provided. Returning retrieved pages of the book.",
+            }
+
+        # 4. Attempt Gemini Multimodal Generation
+        if page_images:
+            answer = gemini.generate_answer(
+                query=query_text,
+                images=page_images,
+                page_metadata=results,
+            )
+            if answer:
+                return {
+                    "query": query_text,
+                    "answer": answer,
+                    "sources": results,
+                    "status": "success",
+                    "engine": f"gemini ({gemini.model})",
+                }
+            else:
+                logger.warning("Gemini API call failed. Falling back to returning retrieved pages.")
+                return {
+                    "query": query_text,
+                    "answer": None,
+                    "sources": results,
+                    "status": "fallback_pages_only",
+                    "engine": "retrieval_only",
+                    "fallback_reason": "Gemini API request failed or rate limited. Returning retrieved pages of the book.",
+                }
+
+        return {
+            "query": query_text,
+            "answer": None,
+            "sources": results,
+            "status": "fallback_pages_only",
+            "engine": "retrieval_only",
+            "fallback_reason": "Could not load page images for Gemini multimodal analysis.",
+        }
 
     def get_page_image(
         self,
