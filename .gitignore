@@ -1,91 +1,60 @@
-/target
-
-# Byte-compiled / optimized / DLL files
-__pycache__/
-.pytest_cache/
-*.py[cod]
-
-# C extensions
-*.so
-
-#Cargo lock
+# Rust build artifacts
+/target/
 Cargo.lock
-
-# Distribution / packaging
-.Python
-.venv/**
-env/
-bin/
-build/
-develop-eggs/
 dist/
-eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-include/
-man/
-venv/
-*.egg-info/
-.installed.cfg
-*.egg
+build/
+*.whl
 
-# Installer logs
-pip-log.txt
-pip-delete-this-directory.txt
-pip-selfcheck.json
+# Compiled C/Rust extensions
+*.so
+*.pyd
+*.dylib
+*.dll
+**/*.so
 
-# Unit test / coverage reports
-htmlcov/
-.tox/
+# Python bytecode & caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
 .coverage
-.cache
-nosetests.xml
-coverage.xml
+htmlcov/
+.cache/
 
-# Translations
-*.mo
+# Virtual environments
+.venv/
+venv/
+env/
+.Python
 
-# Mr Developer
-.mr.developer.cfg
-.project
-.pydevproject
-
-# Rope
-.ropeproject
-
-# Django stuff:
-*.log
-*.pot
-
-.DS_Store
-
-# Sphinx documentation
-docs/_build/
-
-# PyCharm
-.idea/
-
-# VSCode
-.vscode/
-
-# Pyenv
-.python-version
-
-#.github
-.github
-
-**/**/**.so
-
-**/notebooks
-
+# Local data, databases, and embedding caches
 data/
+*.npy
+*.db
+*.sqlite
+*.sqlite3
+tracker.db
 
+# Logs & temporary outputs
+*.log
+retrieved_rank_*.png
+
+# IDE & OS files
+.DS_Store
+.idea/
+.vscode/
+.python-version
+.mr.developer.cfg
+
+# Notebook checkpoints
+.ipynb_checkpoints/
+**/notebooks/.ipynb_checkpoints/
+
+# Assets tracking (preserve assets plots)
+!assets/
+!assets/*.png
+!assets/*.svg
 
 **.svg
-
-**.png
-
-benchmarks/**.md
+notebooks
+config.yaml

@@ -1,4 +1,4 @@
-# sample config  
+# sample config orgiinal flie config.yaml  
 
 # only infernce supported
 base_model_id: "HuggingFaceTB/SmolVLM-256M-Instruct"
