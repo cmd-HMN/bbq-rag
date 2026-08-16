@@ -75,7 +75,7 @@ class BBQClient:
         query_text: str,
         top_k: int = 3,
         gemini_api_key: Optional[str] = None,
-        gemini_model: str = "gemini-1.5-flash",
+        gemini_model: str = "gemini-3.6-flash",
         save_images: bool = False,
         images_output_dir: Optional[str] = None,
     ) -> Dict[str, Any]:
@@ -88,7 +88,7 @@ class BBQClient:
             query_text (str): The search query / question.
             top_k (int): Number of top pages to retrieve (default: 3).
             gemini_api_key (Optional[str]): Gemini API key. If omitted, uses GEMINI_API_KEY env.
-            gemini_model (str): Gemini model name (default: 'gemini-1.5-flash' free-tier default).
+            gemini_model (str): Gemini model name (default: 'gemini-3.6-flash' free-tier default).
             save_images (bool): Whether to save retrieved page images locally.
             images_output_dir (Optional[str]): Directory to save page images if save_images is True.
 
@@ -150,7 +150,7 @@ class BBQClient:
         if self.config is not None:
             if gemini_api_key is None and hasattr(self.config, "gemini_api_key"):
                 gemini_api_key = self.config.gemini_api_key
-            if gemini_model == "gemini-1.5-flash" and hasattr(self.config, "gemini_model"):
+            if gemini_model == "gemini-3.6-flash" and hasattr(self.config, "gemini_model"):
                 gemini_model = self.config.gemini_model
 
         # 3. Check Gemini API client availability

@@ -1,6 +1,6 @@
 """
 Google Gemini Multimodal API Client for Visual Document RAG.
-Supports free-tier defaults (gemini-1.5-flash / gemini-2.0-flash) with multimodal image inputs.
+Supports free-tier defaults (gemini-3.6-flash / gemini-2.0-flash) with multimodal image inputs.
 Gracefully handles API failures and missing keys with zero-crash fallbacks.
 """
 
@@ -14,7 +14,7 @@ from PIL import Image
 
 logger = logging.getLogger("bbq.client.gemini")
 
-DEFAULT_GEMINI_MODEL = "gemini-1.5-flash"
+DEFAULT_GEMINI_MODEL = "gemini-3.6-flash"
 GEMINI_API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 
 class GeminiClient:

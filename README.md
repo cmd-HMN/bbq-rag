@@ -27,7 +27,7 @@ It includes an automated PDF directory watcher, a persistent background embeddin
 - **Adaptive Parallelism**: Dynamic execution routing that executes small batches sequentially on the main thread to avoid work-stealing overhead, and switches to Rayon chunked work pools for large multi-page batches.
 - **Zero-Copy Memory Interop**: Direct ingestion of contiguous 2D/3D NumPy arrays via PyO3 and raw memory pointer passing (`maxsim_ptr`) for PyTorch tensors (`tensor.data_ptr()`).
 - **Vision-Language Indexing Server**: Automated folder monitoring (`data/watch/`), background PDF page rasterization at 150 DPI via PyMuPDF, and persistent SQLite embedding metadata tracking.
-- **Client-Side Gemini Multimodal RAG**: Seamless multimodal answer generation with Google Gemini (`gemini-1.5-flash` / `gemini-2.0-flash`) over top-3 retrieved page images, with automatic fallback to returning document pages when offline or when no API key is provided.
+- **Client-Side Gemini Multimodal RAG**: Seamless multimodal answer generation with Google Gemini (`gemini-3.6-flash` / `gemini-2.0-flash`) over top-3 retrieved page images, with automatic fallback to returning document pages when offline or when no API key is provided.
 
 ---
 
@@ -113,7 +113,7 @@ pdf_render_dpi: 150
 
 # Optional Google Gemini multimodal RAG settings
 gemini_api_key: ""
-gemini_model: "gemini-1.5-flash"
+gemini_model: "gemini-3.6-flash"
 rag_top_k: 3
 ```
 

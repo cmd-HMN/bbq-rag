@@ -29,5 +29,5 @@ pdf_render_dpi: 150
 # Google Gemini multimodal RAG settings
 # If gemini_api_key is omitted/empty, GEMINI_API_KEY / GOOGLE_API_KEY env vars are used.
 gemini_api_key: ""
-gemini_model: "gemini-1.5-flash"
+gemini_model: "gemini-3.6-flash"
 rag_top_k: 3

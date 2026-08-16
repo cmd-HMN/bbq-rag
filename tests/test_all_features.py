@@ -28,7 +28,7 @@ def test_system_cache_path():
     config = ModelConfigWrapper()
     assert config.embeddings_output_path == get_system_cache_dir("embeddings")
     assert config.sqlite_db_path == get_system_cache_dir("tracker.db")
-    assert config.gemini_model == "gemini-1.5-flash"
+    assert config.gemini_model == "gemini-3.6-flash"
     assert config.rag_top_k == 3
 
     tracker = SqlliteDB()

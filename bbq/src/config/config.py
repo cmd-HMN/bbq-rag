@@ -46,7 +46,7 @@ class ModelConfigWrapper:
         sqlite_db_path: Optional[str] = None,
         pdf_render_dpi: int = 150,
         gemini_api_key: Optional[str] = None,
-        gemini_model: str = "gemini-1.5-flash",
+        gemini_model: str = "gemini-3.6-flash",
         rag_top_k: int = 3,
     ) -> None:
         self.base_model_id: str = base_model_id
@@ -180,7 +180,7 @@ def load_configuration_from_yaml_file(
     else:
         gemini_api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
 
-    gemini_model: str = str(parsed_yaml_data.get("gemini_model", "gemini-1.5-flash"))
+    gemini_model: str = str(parsed_yaml_data.get("gemini_model", "gemini-3.6-flash"))
     rag_top_k: int = int(parsed_yaml_data.get("rag_top_k", 3))
 
     if not base_model_id:

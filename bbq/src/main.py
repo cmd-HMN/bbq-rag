@@ -153,7 +153,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
         "--gemini-api-key", "-g", type=str, default=None, help="Google Gemini API key (or set in config.yaml / GEMINI_API_KEY env var)"
     )
     query_parser.add_argument(
-        "--gemini-model", type=str, default=None, help="Gemini model name (default from config: gemini-1.5-flash)"
+        "--gemini-model", type=str, default=None, help="Gemini model name (default from config: gemini-3.6-flash)"
     )
     query_parser.add_argument("--save-images", "-i", action="store_true", help="Save page images to disk")
     query_parser.add_argument("--verbose", "-v", action="store_true", help="Enable verbose client debug logging")
