@@ -1,63 +1,134 @@
-use criterion::{Criterion, Throughput, black_box, criterion_group, criterion_main};
+use criterion::{
+    BatchSize, BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main,
+};
+use pprof::criterion::{Output, PProfProfiler};
 use maxsimd::cpu::vec256::simd::fused_dot_max_dim128_avx2;
 use maxsimd::func::function::internal::pro_sgl_doc_msgemm;
+use rand::Rng;
 
 macro_rules! single_func_benchmark {
-    // with throughput
-     ($grp: expr, throughput => $thput: expr, $name: expr, $func: expr $(, $args:expr)*) => {{
+    (
+        $grp: expr,
+        throughput => $thput: expr,
+        $name: expr,
+        $func: expr,
+        $q_len: expr,
+        $d_len: expr,
+        $dim: expr
+        $(, $args:expr)*
+    ) => {{
         $grp.throughput($thput);
         $grp.bench_function($name, |b| {
-            b.iter(|| {
-                black_box($func($(black_box($args)),*))
-            })
+            b.iter_batched(
+                || {
+                    let mut rng = rand::thread_rng();
+                    let q_data: Vec<f32> = (0..($q_len * $dim))
+                        .map(|_| rng.gen_range(-1.0..1.0))
+                        .collect();
+                    let d_data: Vec<f32> = (0..($d_len * $dim))
+                        .map(|_| rng.gen_range(-1.0..1.0))
+                        .collect();
+                    (q_data, d_data)
+                },
+                |(q_data, d_data)| {
+                    black_box($func(
+                        black_box(&q_data),
+                        black_box(&d_data),
+                        black_box($q_len),
+                        black_box($d_len)
+                        $(, black_box($args))*
+                    ))
+                },
+                BatchSize::LargeInput,
+            )
         });
     }};
 
-    // without throughput
-    ($grp: expr, $name: expr, $func: expr $(, $args:expr)*) => {{
+    (
+        $grp: expr,
+        $name: expr,
+        $func: expr,
+        $q_len: expr,
+        $d_len: expr,
+        $dim: expr
+        $(, $args:expr)*
+    ) => {{
         $grp.bench_function($name, |b| {
-            b.iter(|| {
-                black_box($func($(black_box($args)),*))
-            })
+            b.iter_batched(
+                || {
+                    let mut rng = rand::thread_rng();
+                    let q_data: Vec<f32> = (0..($q_len * $dim))
+                        .map(|_| rng.gen_range(-1.0..1.0))
+                        .collect();
+                    let d_data: Vec<f32> = (0..($d_len * $dim))
+                        .map(|_| rng.gen_range(-1.0..1.0))
+                        .collect();
+                    (q_data, d_data)
+                },
+                // Measure Phase
+                |(q_data, d_data)| {
+                    black_box($func(
+                        black_box(&q_data),
+                        black_box(&d_data),
+                        black_box($q_len),
+                        black_box($d_len)
+                        $(, black_box($args))*
+                    ))
+                },
+                BatchSize::LargeInput,
+            )
         });
     }};
 }
 
-fn bench_pro_sgl_doc(c: &mut Criterion) {
+fn bench_level_1(c: &mut Criterion) {
     let mut group = c.benchmark_group("Level 1 Functions");
 
+    // keeping same dim as colbert
     let dim = 128;
+
+    //keeping this const for now
     let q_len = 32;
-    let d_len = 256;
 
-    let q_data: Vec<f32> = vec![0.5; q_len * dim];
-    let d_data: Vec<f32> = vec![0.2; d_len * dim];
+    let doc_lens = [
+        128, // default
+        256, 1024, 4096, 8192, // exterme testing
+    ];
 
-    unsafe {
+    for d_len in doc_lens {
+        unsafe {
+            single_func_benchmark!(
+                group,
+                throughput => Throughput::Elements(dim as u64 * q_len as u64 * d_len as u64),
+                BenchmarkId::new("fused_dot_max_dim128_avx2", d_len),
+                fused_dot_max_dim128_avx2,
+                q_len,
+                d_len,
+                dim
+            );
+        }
+
+        // choosing this as sole base line
         single_func_benchmark!(
             group,
             throughput => Throughput::Elements(dim as u64 * q_len as u64 * d_len as u64),
-            "fused_dot_max_dim128_avx2",
-            fused_dot_max_dim128_avx2,
-            &q_data,
-            &d_data,
+            BenchmarkId::new("pro_sgl_doc_msgemm", d_len),
+            pro_sgl_doc_msgemm,
             q_len,
-            d_len
+            d_len,
+            // this if for calculating the doc len
+            dim,
+            dim // the function one dim (DONT GEt CONFUSE)
         );
     }
-    single_func_benchmark!(
-        group,
-        throughput => Throughput::Elements(dim as u64 * q_len as u64 * d_len as u64),
-        "pro_sgl_doc_msgemm",
-        pro_sgl_doc_msgemm,
-        &q_data,
-        &d_data,
-        q_len,
-        d_len,
-        dim
-    );
     group.finish();
 }
 
-criterion_group!(benches, bench_pro_sgl_doc);
+criterion_group!(
+    name=benches;
+    // 100sec 
+    config = Criterion::default().with_profiler(PProfProfiler::new(100, Output::Flamegraph(None)));
+    targets = bench_level_1
+);
+
 criterion_main!(benches);

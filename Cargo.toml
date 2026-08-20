@@ -21,11 +21,13 @@ rust.unsafe_code = "allow"
 pyo3 = "0.29.0"
 pulp = "0.22.3"
 rayon   = "1.10"
+rand = "0.8"
 numpy   = "0.29"
 pyo3-stub-gen = "0.23.0"
 intel-mkl-src = { version = "0.8.1", optional = true, features = ["mkl-static-lp64-seq"] }
 libc = "0.2"
 raw-cpuid = "11"
+pprof = "0.15.0"
 
 # [dependencies.intel-mkl-src]
 # version = "0.8.1"
@@ -42,6 +44,10 @@ mkl = ["intel-mkl-src"]
 [dev-dependencies]
 criterion = "0.5"
 approx = "0.5"
+pprof = { version = "0.15.0", features = ["flamegraph", "criterion"] }
+
+[profile.bench]
+debug = false
 
 [[bench]]
 name = "bench"
