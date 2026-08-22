@@ -1,9 +1,9 @@
 use criterion::{
-    BatchSize, BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main,
+    BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main,
 };
 use maxsimd::cpu::vec256::simd::{fused_dot_max_dim128_avx2, fused_dot_max_generic_avx2};
-use maxsimd::func::function::internal::{pro_sgl_doc_msgemm};
-use maxsimd::func::function::{maxsim_variable_length};
+use maxsimd::func::function::internal::pro_sgl_doc_msgemm;
+use maxsimd::func::function::maxsim_variable_length;
 
 use pprof::criterion::{Output, PProfProfiler};
 use rand::Rng;
@@ -20,32 +20,29 @@ macro_rules! single_func_benchmark {
         $(, $args:expr)*
     ) => {{
         $grp.throughput($thput);
+        let mut rng = rand::thread_rng();
+        let q_data: Vec<f32> = (0..($q_len * $dim))
+            .map(|_| rng.gen_range(-1.0..1.0)).collect();
+        let d_data: Vec<f32> = (0..($d_len * $dim))
+            .map(|_| rng.gen_range(-1.0..1.0)).collect();
         $grp.bench_function($name, |b| {
-            b.iter_batched(
+            b.iter(
                 || {
-                    let mut rng = rand::thread_rng();
-                    let q_data: Vec<f32> = (0..($q_len * $dim))
-                        .map(|_| rng.gen_range(-1.0..1.0))
-                        .collect();
-                    let d_data: Vec<f32> = (0..($d_len * $dim))
-                        .map(|_| rng.gen_range(-1.0..1.0))
-                        .collect();
-                    (q_data, d_data)
+                black_box($func(
+                black_box(&q_data),
+                black_box(&d_data),
+                black_box($q_len),
+                black_box($d_len)
+                $(, black_box($args))*
+            ))
                 },
-                |(q_data, d_data)| {
-                    black_box($func(
-                        black_box(&q_data),
-                        black_box(&d_data),
-                        black_box($q_len),
-                        black_box($d_len)
-                        $(, black_box($args))*
-                    ))
-                },
-                BatchSize::LargeInput,
             )
         });
     }};
 
+
+    //TODO
+    //Will change this one 
     (
         $grp: expr,
         $name: expr,
@@ -173,42 +170,38 @@ fn bench_level_2(c: &mut Criterion) {
     let q_len = 32;
     let d_len = 256;
 
-
     // for maxsim_variable_length -> base case
-    group.throughput(Throughput::Elements(dim as u64 * q_len as u64 * d_len as u64));
+    group.throughput(Throughput::Elements(
+        dim as u64 * q_len as u64 * d_len as u64,
+    ));
+
+    let mut rng = rand::thread_rng();
+    let q_data: Vec<f32> = (0..(q_len * dim))
+            .map(|_| rng.gen_range(-1.0..1.0))
+            .collect();
+    let d_data: Vec<f32> = (0..(d_len * dim))
+            .map(|_| rng.gen_range(-1.0..1.0))
+            .collect();
+
+    // [(doc_idx, doc_len, doc_data)]
+    let dd = vec![(0_usize, d_len, d_data)];
+
 
     group.bench_function("maxsim_variable_length", |b| {
-        b.iter_batched(|| {
-        // setup
-        let mut rng = rand::thread_rng();
-        let q_data: Vec<f32>  = (0..(q_len * dim))
-            .map(|_| rng.gen_range(-1.0..1.0))
-            .collect();
-
-        let d_data: Vec<f32> = (0..(d_len * dim))
-            .map(|_| rng.gen_range(-1.0..1.0))
-            .collect();
-
-        // [(doc_idx, doc_len, doc_data)]
-        let dd = vec![(0_usize, d_len, d_data)];
-
-        (q_data, dd)
-        }, 
-
-        // Measure Phase
-        |(q_data, dd)| {
+        b.iter(
+            || {
             black_box(maxsim_variable_length(
-                black_box(q_data),
-                black_box(dd),
-                black_box(q_len),
-                black_box(dim)
-            ))
-        }
-        , BatchSize::LargeInput);         
+            black_box(q_data.clone()),
+            black_box(dd.clone()),
+            black_box(q_len),
+            black_box(dim),
+                ))
+            },
+        );
     });
 
     group.finish();
- }
+}
 
 criterion_group!(
     name=benches;

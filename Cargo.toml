@@ -47,7 +47,7 @@ approx = "0.5"
 pprof = { version = "0.15.0", features = ["flamegraph", "criterion"] }
 
 [profile.bench]
-debug = false
+debug = true
 
 [[bench]]
 name = "bench"

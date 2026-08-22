@@ -107,8 +107,18 @@ pub mod simd {
         }
     }
 
-    /// Ultra-fast fused dot-product and max reduction specialized for dim=128 (ColPali / ColBERT standard).
-    /// Uses outer query blocking and streaming document access with zero allocations.
+    /// Colbert Style fused dot-product and max reduction for 128-dimensional vectors.
+    /// 
+    /// # Arguments
+    /// 
+    /// * `q` - The query vector.
+    /// * `d` - The document vector.
+    /// * `q_len` - The length of the query vector.
+    /// * `d_len` - The length of the document vector.
+    ///
+    /// # Returns
+    /// 
+    /// The fused dot-product and max reduction for 128-dimensional vectors.
     #[target_feature(enable = "avx2", enable = "fma")]
     #[inline]
     pub unsafe fn fused_dot_max_dim128_avx2(
@@ -117,6 +127,9 @@ pub mod simd {
         q_len: usize,
         d_len: usize,
     ) -> f32 {
+
+        // have done some tested and based on those choosing 4 * 2(more info in next commit)
+        
         if q_len == 0 || d_len == 0 {
             return 0.0;
         }
@@ -128,6 +141,7 @@ pub mod simd {
         unsafe {
             let mut qi = 0;
             while qi + 4 <= q_len {
+                // accumulators
                 let q0 = q_ptr.add(qi * 128);
                 let q1 = q_ptr.add((qi + 1) * 128);
                 let q2 = q_ptr.add((qi + 2) * 128);
@@ -139,20 +153,41 @@ pub mod simd {
                 let mut m3 = f32::NEG_INFINITY;
 
                 for di in 0..d_len {
+                    // pre-fetch
                     let curr_d_ptr = d_ptr.add(di * 128);
 
-                    let mut acc0 = _mm256_setzero_ps();
-                    let mut acc1 = _mm256_setzero_ps();
-                    let mut acc2 = _mm256_setzero_ps();
-                    let mut acc3 = _mm256_setzero_ps();
+                    let mut acc0_a = _mm256_setzero_ps();
+                    let mut acc1_a = _mm256_setzero_ps();
+                    let mut acc2_a = _mm256_setzero_ps();
+                    let mut acc3_a = _mm256_setzero_ps();
 
-                    for k in 0..16 {
-                        let vd = _mm256_loadu_ps(curr_d_ptr.add(k * 8));
-                        acc0 = _mm256_fmadd_ps(vd, _mm256_loadu_ps(q0.add(k * 8)), acc0);
-                        acc1 = _mm256_fmadd_ps(vd, _mm256_loadu_ps(q1.add(k * 8)), acc1);
-                        acc2 = _mm256_fmadd_ps(vd, _mm256_loadu_ps(q2.add(k * 8)), acc2);
-                        acc3 = _mm256_fmadd_ps(vd, _mm256_loadu_ps(q3.add(k * 8)), acc3);
+                    let mut acc0_b = _mm256_setzero_ps();
+                    let mut acc1_b = _mm256_setzero_ps();
+                    let mut acc2_b = _mm256_setzero_ps();
+                    let mut acc3_b = _mm256_setzero_ps();
+
+                    // moves to 16 cuz 128 / 8 = 16 yeah
+                    for k in (0..16).step_by(2) {
+                        let va = _mm256_loadu_ps(curr_d_ptr.add(k * 8));
+                        let vb = _mm256_loadu_ps(curr_d_ptr.add((k + 1) * 8));
+
+                        acc0_a = _mm256_fmadd_ps(va, _mm256_loadu_ps(q0.add(k * 8)), acc0_a);
+                        acc0_b = _mm256_fmadd_ps(vb, _mm256_loadu_ps(q0.add(k * 8 + 8)), acc0_b);
+
+                        acc1_a = _mm256_fmadd_ps(va, _mm256_loadu_ps(q1.add(k * 8)), acc1_a);
+                        acc1_b = _mm256_fmadd_ps(vb, _mm256_loadu_ps(q1.add(k * 8 + 8)), acc1_b);
+
+                        acc2_a = _mm256_fmadd_ps(va, _mm256_loadu_ps(q2.add(k * 8)), acc2_a);
+                        acc2_b = _mm256_fmadd_ps(vb, _mm256_loadu_ps(q2.add(k * 8 + 8)), acc2_b);
+
+                        acc3_a = _mm256_fmadd_ps(va, _mm256_loadu_ps(q3.add(k * 8)), acc3_a);
+                        acc3_b = _mm256_fmadd_ps(vb, _mm256_loadu_ps(q3.add(k * 8 + 8)), acc3_b);
                     }
+
+                    let acc0 = _mm256_add_ps(acc0_a, acc0_b);
+                    let acc1 = _mm256_add_ps(acc1_a, acc1_b);
+                    let acc2 = _mm256_add_ps(acc2_a, acc2_b);
+                    let acc3 = _mm256_add_ps(acc3_a, acc3_b);
 
                     let dot0 = horizontal_sum(acc0);
                     let dot1 = horizontal_sum(acc1);
@@ -177,6 +212,8 @@ pub mod simd {
                 qi += 4;
             }
 
+
+            // left over
             while qi < q_len {
                 let curr_q = q_ptr.add(qi * 128);
                 let mut max_val = f32::NEG_INFINITY;
@@ -205,7 +242,9 @@ pub mod simd {
         total_score
     }
 
-    /// Generic fused dot-product and max reduction for arbitrary embedding dimensions.
+    //TODO
+    //This isn't optimzied at all, and haven't planning on doing so as the aim is make a colbert
+    //style typ shit so this is the best I can do
     #[target_feature(enable = "avx2", enable = "fma")]
     #[inline]
     pub unsafe fn fused_dot_max_generic_avx2(
@@ -275,9 +314,44 @@ pub mod simd {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rand::{Rng, thread_rng};
+    
+
+    pub fn naive_maxsim_dim128(q: &[f32], d: &[f32], q_len: usize, d_len: usize) -> f32 {
+        if q_len == 0 || d_len == 0 {
+            return 0.0;
+        }
+
+        let mut total_score = 0.0;
+        for qi in 0..q_len {
+            let mut max_doc_score = f32::NEG_INFINITY;
+            for di in 0..d_len {
+                let mut dot = 0.0;
+                // Standard linear dot product
+                for k in 0..128 {
+                    dot += q[qi * 128 + k] * d[di * 128 + k];
+                }
+                if dot > max_doc_score {
+                    max_doc_score = dot;
+                }
+            }
+            total_score += max_doc_score;
+        }
+        total_score
+    }
 
     fn max_scalar(a: &[f32]) -> f32 {
         a.iter().copied().fold(f32::NEG_INFINITY, f32::max)
+    }
+
+    fn generate_data(len: usize) -> Vec<f32> {
+        let mut rng = thread_rng();
+        (0..(len * 128)).map(|_| rng.gen_range(-1.0..1.0)).collect()
+    }
+
+    fn assert_approx_eq(a: f32, b: f32) {
+        let epsilon = 1e-4; // Margin of error for floating point reordering
+        assert!((a - b).abs() < epsilon, "Mismatch: SIMD {} vs Naive {}", a, b);
     }
 
     fn assert_max_eq(input: &[f32]) {
@@ -404,6 +478,40 @@ mod tests {
             got_generic,
             expected
         );
+    }
+
+    #[test]
+    fn test_simd_correctness_standard_batch() {
+        let q_len = 32; // Divides perfectly by 4
+        let d_len = 100;
+        let q = generate_data(q_len);
+        let d = generate_data(d_len);
+
+        let naive_score = naive_maxsim_dim128(&q, &d, q_len, d_len);
+        let simd_score = unsafe { simd::fused_dot_max_dim128_avx2(&q, &d, q_len, d_len) };
+        assert_approx_eq(simd_score, naive_score);
+    }
+
+    #[test]
+    fn test_simd_correctness_leftovers() {
+        let q_len = 5; // Forces the "leftover" while loop to run (4 + 1)
+        let d_len = 10;
+        let q = generate_data(q_len);
+        let d = generate_data(d_len);
+
+        let naive_score = naive_maxsim_dim128(&q, &d, q_len, d_len);
+        let simd_score = unsafe { simd::fused_dot_max_dim128_avx2(&q, &d, q_len, d_len) };
+        assert_approx_eq(simd_score, naive_score);
+    }
+
+    #[test]
+    fn test_simd_correctness_empty() {
+        let q: Vec<f32> = vec![];
+        let d: Vec<f32> = vec![];
+        let naive_score = naive_maxsim_dim128(&q, &d, 0, 0);
+        let simd_score = unsafe { simd::fused_dot_max_dim128_avx2(&q, &d, 0, 0) };
+        assert_eq!(simd_score, 0.0);
+        assert_eq!(naive_score, 0.0);
     }
 
     #[test]
