@@ -170,7 +170,7 @@ pub mod function {
             curr_offset += doc_len * dim;
         }
 
-        if n_docs <= 24 {
+        if n_docs <= 64 {
             let mut results = Vec::with_capacity(n_docs);
             if dim == 128 {
                 for (offset, doc_len) in offsets {
@@ -189,7 +189,7 @@ pub mod function {
         } else if dim == 128 {
             offsets
                 .into_par_iter()
-                .with_min_len(8)
+                .with_min_len(64)
                 .map(|(offset, doc_len)| {
                     let doc_data = &d_flat[offset..offset + doc_len * 128];
                     unsafe { crate::cpu::vec256::simd::fused_dot_max_dim128_avx2(q, doc_data, q_len, doc_len) }
@@ -198,7 +198,7 @@ pub mod function {
         } else {
             offsets
                 .into_par_iter()
-                .with_min_len(8)
+                .with_min_len(64)
                 .map(|(offset, doc_len)| {
                     let doc_data = &d_flat[offset..offset + doc_len * dim];
                     unsafe { crate::cpu::vec256::simd::fused_dot_max_generic_avx2(q, doc_data, q_len, doc_len, dim) }
