@@ -107,17 +107,116 @@ pub mod simd {
         }
     }
 
+    #[inline(always)]
+    pub fn hs_4x(
+        a0: __m256,
+        a1: __m256,
+        a2: __m256,
+        a3: __m256
+    ) -> (f32, f32, f32, f32) {
+        unsafe {
+            let l0 = _mm256_castps256_ps128(a0);
+            let h0 = _mm256_extractf128_ps(a0, 1);
+            let s0 = _mm_add_ps(l0, h0);
+
+            let l1 = _mm256_castps256_ps128(a1);
+            let h1 = _mm256_extractf128_ps(a1, 1);
+            let s1 = _mm_add_ps(l1, h1);
+
+            let l2 = _mm256_castps256_ps128(a2);
+            let h2 = _mm256_extractf128_ps(a2, 1);
+            let s2 = _mm_add_ps(l2, h2);
+
+            let l3 = _mm256_castps256_ps128(a3);
+            let h3 = _mm256_extractf128_ps(a3, 1);
+            let s3 = _mm_add_ps(l3, h3);
+
+            let h01 = _mm_hadd_ps(s0, s1);
+            let h23 = _mm_hadd_ps(s2, s3);
+
+            let h0123 = _mm_hadd_ps(h01, h23);
+
+            let mut output = [f32::NEG_INFINITY; 4];
+            _mm_storeu_ps(output.as_mut_ptr(), h0123);
+            (output[0], output[1], output[2], output[3])
+        }
+    }
+
+    //TODO 
+    //Change the desing from AoS to SoA
+    //Furhter more cache tiling
+    /// Kernel for fused_dot_max_dim128_avx2
+    /// Size 4 * 2
+    /// Description: This is the kernel for the fused dot-product and max reduction for 128-dimensional vectors.
+    ///
+    /// The kernel 6 * 16 is not good for this case
+    /// Left overs calculations + a lot of if else checking + horizontal sum problem(cus of 6 way)
+    /// Haven't test the 6 * 16 btw, ;) so maybe it will be good(betting everything on a lousy
+    /// asumption, further this [6*16 or 6*2] can be better like bud it uses in the gotoblass)
+    ///
+    ///
+    /// Tried using the kernel without max, the performace regressed so added support with max
+    macro_rules! kernel_4x2_dim128_with_max_handling {
+        ($q0:ident, $q1:ident, $q2:ident, $q3:ident, $doc:ident, $m0:ident, $m1:ident, $m2:ident, $m3:ident) => {{
+            let mut acc0_a = _mm256_setzero_ps();
+            let mut acc0_b = _mm256_setzero_ps();
+            let mut acc1_a = _mm256_setzero_ps();
+            let mut acc1_b = _mm256_setzero_ps();
+            let mut acc2_a = _mm256_setzero_ps();
+            let mut acc2_b = _mm256_setzero_ps();
+            let mut acc3_a = _mm256_setzero_ps();
+            let mut acc3_b = _mm256_setzero_ps();
+
+            for k in 0..8 {
+                let va = _mm256_loadu_ps($doc.add(k * 16));
+                let vb = _mm256_loadu_ps($doc.add((k * 16) + 8));
+
+                acc0_a = _mm256_fmadd_ps(va, _mm256_loadu_ps($q0.add(k * 16)), acc0_a);
+                acc0_b = _mm256_fmadd_ps(vb, _mm256_loadu_ps($q0.add((k * 16) + 8)), acc0_b);
+
+                acc1_a = _mm256_fmadd_ps(va, _mm256_loadu_ps($q1.add(k * 16)), acc1_a);
+                acc1_b = _mm256_fmadd_ps(vb, _mm256_loadu_ps($q1.add((k * 16) + 8)), acc1_b);
+
+                acc2_a = _mm256_fmadd_ps(va, _mm256_loadu_ps($q2.add(k * 16)), acc2_a);
+                acc2_b = _mm256_fmadd_ps(vb, _mm256_loadu_ps($q2.add((k * 16) + 8)), acc2_b);
+
+                acc3_a = _mm256_fmadd_ps(va, _mm256_loadu_ps($q3.add(k * 16)), acc3_a);
+                acc3_b = _mm256_fmadd_ps(vb, _mm256_loadu_ps($q3.add((k * 16) + 8)), acc3_b);
+            }
+
+            let a0 = _mm256_add_ps(acc0_a, acc0_b);
+            let a1 = _mm256_add_ps(acc1_a, acc1_b);
+            let a2 = _mm256_add_ps(acc2_a, acc2_b);
+            let a3 = _mm256_add_ps(acc3_a, acc3_b);
+
+            let (d0, d1, d2, d3) = hs_4x(a0, a1, a2, a3);
+
+            if d0 > $m0 {
+                $m0 = d0;
+            }
+            if d1 > $m1 {
+                $m1 = d1;
+            }
+            if d2 > $m2 {
+                $m2 = d2;
+            }
+            if d3 > $m3 {
+                $m3 = d3;
+            }
+            }};
+    }
+
     /// Colbert Style fused dot-product and max reduction for 128-dimensional vectors.
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `q` - The query vector.
     /// * `d` - The document vector.
     /// * `q_len` - The length of the query vector.
     /// * `d_len` - The length of the document vector.
     ///
     /// # Returns
-    /// 
+    ///
     /// The fused dot-product and max reduction for 128-dimensional vectors.
     #[target_feature(enable = "avx2", enable = "fma")]
     #[inline]
@@ -127,9 +226,8 @@ pub mod simd {
         q_len: usize,
         d_len: usize,
     ) -> f32 {
-
         // have done some tested and based on those choosing 4 * 2(more info in next commit)
-        
+
         if q_len == 0 || d_len == 0 {
             return 0.0;
         }
@@ -153,65 +251,16 @@ pub mod simd {
                 let mut m3 = f32::NEG_INFINITY;
 
                 for di in 0..d_len {
-                    // pre-fetch
                     let curr_d_ptr = d_ptr.add(di * 128);
 
-                    let mut acc0_a = _mm256_setzero_ps();
-                    let mut acc1_a = _mm256_setzero_ps();
-                    let mut acc2_a = _mm256_setzero_ps();
-                    let mut acc3_a = _mm256_setzero_ps();
-
-                    let mut acc0_b = _mm256_setzero_ps();
-                    let mut acc1_b = _mm256_setzero_ps();
-                    let mut acc2_b = _mm256_setzero_ps();
-                    let mut acc3_b = _mm256_setzero_ps();
-
-                    // moves to 16 cuz 128 / 8 = 16 yeah
-                    for k in (0..16).step_by(2) {
-                        let va = _mm256_loadu_ps(curr_d_ptr.add(k * 8));
-                        let vb = _mm256_loadu_ps(curr_d_ptr.add((k + 1) * 8));
-
-                        acc0_a = _mm256_fmadd_ps(va, _mm256_loadu_ps(q0.add(k * 8)), acc0_a);
-                        acc0_b = _mm256_fmadd_ps(vb, _mm256_loadu_ps(q0.add(k * 8 + 8)), acc0_b);
-
-                        acc1_a = _mm256_fmadd_ps(va, _mm256_loadu_ps(q1.add(k * 8)), acc1_a);
-                        acc1_b = _mm256_fmadd_ps(vb, _mm256_loadu_ps(q1.add(k * 8 + 8)), acc1_b);
-
-                        acc2_a = _mm256_fmadd_ps(va, _mm256_loadu_ps(q2.add(k * 8)), acc2_a);
-                        acc2_b = _mm256_fmadd_ps(vb, _mm256_loadu_ps(q2.add(k * 8 + 8)), acc2_b);
-
-                        acc3_a = _mm256_fmadd_ps(va, _mm256_loadu_ps(q3.add(k * 8)), acc3_a);
-                        acc3_b = _mm256_fmadd_ps(vb, _mm256_loadu_ps(q3.add(k * 8 + 8)), acc3_b);
-                    }
-
-                    let acc0 = _mm256_add_ps(acc0_a, acc0_b);
-                    let acc1 = _mm256_add_ps(acc1_a, acc1_b);
-                    let acc2 = _mm256_add_ps(acc2_a, acc2_b);
-                    let acc3 = _mm256_add_ps(acc3_a, acc3_b);
-
-                    let dot0 = horizontal_sum(acc0);
-                    let dot1 = horizontal_sum(acc1);
-                    let dot2 = horizontal_sum(acc2);
-                    let dot3 = horizontal_sum(acc3);
-
-                    if dot0 > m0 {
-                        m0 = dot0;
-                    }
-                    if dot1 > m1 {
-                        m1 = dot1;
-                    }
-                    if dot2 > m2 {
-                        m2 = dot2;
-                    }
-                    if dot3 > m3 {
-                        m3 = dot3;
-                    }
+                    kernel_4x2_dim128_with_max_handling!(
+                        q0, q1, q2, q3, curr_d_ptr, m0, m1, m2, m3
+                    );
                 }
 
                 total_score += m0 + m1 + m2 + m3;
                 qi += 4;
             }
-
 
             // left over
             while qi < q_len {
@@ -315,7 +364,6 @@ pub mod simd {
 mod tests {
     use super::*;
     use rand::{Rng, thread_rng};
-    
 
     pub fn naive_maxsim_dim128(q: &[f32], d: &[f32], q_len: usize, d_len: usize) -> f32 {
         if q_len == 0 || d_len == 0 {
@@ -351,7 +399,12 @@ mod tests {
 
     fn assert_approx_eq(a: f32, b: f32) {
         let epsilon = 1e-4; // Margin of error for floating point reordering
-        assert!((a - b).abs() < epsilon, "Mismatch: SIMD {} vs Naive {}", a, b);
+        assert!(
+            (a - b).abs() < epsilon,
+            "Mismatch: SIMD {} vs Naive {}",
+            a,
+            b
+        );
     }
 
     fn assert_max_eq(input: &[f32]) {
