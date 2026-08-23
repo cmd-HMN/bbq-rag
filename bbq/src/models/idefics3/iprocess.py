@@ -3,7 +3,7 @@ import torch
 from PIL import Image
 from transformers import BatchEncoding, BatchFeature, Idefics3Processor
 from transformers import logging as tf_logging
-from maxsimd import maxsim_vrlen
+from maxsimd import maxsim_3d_ptr
 from bbq.src.common.base import BaseProcessor
 
 tf_logging.set_verbosity_warning()
@@ -123,7 +123,7 @@ class CIdeficsProcessor(Idefics3Processor, BaseProcessor):
         """
         Maxsim score between qs and ps
 
-        Uses maxsim_vrlen to compute the scores
+        Uses maxsim_3d_ptr for zero-copy memory pointer MaxSim scoring.
 
         Args:
             qs (Union[torch.Tensor, List[torch.Tensor]]): The queries
@@ -133,34 +133,42 @@ class CIdeficsProcessor(Idefics3Processor, BaseProcessor):
         Returns:
             torch.Tensor: The scores
         """
-        doc_lengths: List[int] = [p.shape[0] for p in ps]
-        dim: int = ps[0].shape[1]
-        d_flat = (
-            torch.cat([p.reshape(-1) for p in ps], dim=0)
-            .to(torch.float32)
-            .cpu()
-            .numpy()
-        )
+        if isinstance(qs, torch.Tensor):
+            if qs.ndim == 2:
+                qs_list = [qs]
+            elif qs.ndim == 3:
+                qs_list = [qs[i] for i in range(qs.shape[0])]
+            else:
+                qs_list = [qs]
+        else:
+            qs_list = list(qs)
 
+        if isinstance(ps, torch.Tensor):
+            if ps.ndim == 2:
+                ps_tensor = ps.unsqueeze(0).contiguous().float().cpu()
+            else:
+                ps_tensor = ps.contiguous().float().cpu()
+        elif isinstance(ps, list):
+            ps_tensor = torch.stack(ps).contiguous().float().cpu()
+        else:
+            raise ValueError(f"Unsupported passages type: {type(ps)}")
+
+        num_docs, tokens_per_doc, dim = ps_tensor.shape
         scores_list: List[List[float]] = []
-        for q in qs:
-            q_len: int = q.shape[0]
-            q_flat = q.reshape(-1).to(torch.float32).cpu().numpy()
 
-            row_scores: List[float] = []
-            offset: int = 0
-            for j in range(0, len(ps), batch_size):
-                chunk_lengths: List[int] = doc_lengths[j : j + batch_size]
-                chunk_size: int = sum(chunk_lengths) * dim
-                d_chunk = d_flat[offset : offset + chunk_size]
-                offset += chunk_size
+        for q in qs_list:
+            q_cont = q.contiguous().float().cpu()
+            q_len = q_cont.shape[0]
 
-                chunk_scores: List[float] = maxsim_vrlen(
-                    q_flat, d_chunk, chunk_lengths, q_len, dim
-                )
-                row_scores.extend(chunk_scores)
-
-            scores_list.append(row_scores)
+            scores: List[float] = maxsim_3d_ptr(
+                q_cont.data_ptr(),
+                ps_tensor.data_ptr(),
+                q_len,
+                num_docs,
+                tokens_per_doc,
+                dim,
+            )
+            scores_list.append(scores)
 
         return torch.tensor(scores_list, dtype=torch.float32)
 

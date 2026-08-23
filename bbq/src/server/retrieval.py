@@ -35,7 +35,8 @@ def query_indexed_documents(
     q_tensor: torch.Tensor = engine.encode_query_text_inputs([query_text])
     q_mat = q_tensor[0].cpu().float().numpy()
 
-    all_page_results = []
+    page_metadata = []
+    page_embeddings_list = []
 
     for record in completed_records:
         emb_path = record["embedding_path"]
@@ -43,33 +44,40 @@ def query_indexed_documents(
             continue
 
         doc_emb = np.load(emb_path)
+        if doc_emb.ndim == 2:
+            doc_emb = np.expand_dims(doc_emb, axis=0)
 
-        scores = maxsim(q_mat, doc_emb)
-
-        if doc_emb.ndim == 3:
-            num_pages = doc_emb.shape[0]
-            for page_idx, score in enumerate(scores):
-                all_page_results.append(
-                    {
-                        "score": float(score),
-                        "file_path": record["file_path"],
-                        "filename": os.path.basename(record["file_path"]),
-                        "file_hash": record["file_hash"],
-                        "page_number": page_idx + 1,
-                        "total_pages": num_pages,
-                    }
-                )
-        else:
-            all_page_results.append(
+        num_pages = doc_emb.shape[0]
+        for page_idx in range(num_pages):
+            page_metadata.append(
                 {
-                    "score": float(scores[0]),
                     "file_path": record["file_path"],
                     "filename": os.path.basename(record["file_path"]),
                     "file_hash": record["file_hash"],
-                    "page_number": 1,
-                    "total_pages": 1,
+                    "page_number": page_idx + 1,
+                    "total_pages": num_pages,
                 }
             )
+        page_embeddings_list.append(doc_emb)
+
+    if not page_embeddings_list:
+        return []
+
+    # Batch all document pages into a single contiguous 3D array: (total_pages, tokens_per_page, dim)
+    batched_docs_3d = (
+        page_embeddings_list[0]
+        if len(page_embeddings_list) == 1
+        else np.concatenate(page_embeddings_list, axis=0)
+    )
+
+    # Multi-core Rayon parallelized MaxSim scoring across all document pages
+    scores = maxsim(q_mat, batched_docs_3d)
+
+    all_page_results = []
+    for meta, score in zip(page_metadata, scores):
+        meta_dict = meta.copy()
+        meta_dict["score"] = float(score)
+        all_page_results.append(meta_dict)
 
     all_page_results.sort(key=lambda x: x["score"], reverse=True)
     return all_page_results[:top_k]
