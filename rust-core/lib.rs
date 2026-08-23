@@ -1,6 +1,7 @@
 pub mod blas;
 pub mod cpu;
 pub mod func;
+pub mod quantization;
 
 use numpy::{PyReadonlyArray1, PyReadonlyArrayDyn, PyUntypedArrayMethods};
 use pyo3::prelude::*;
