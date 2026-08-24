@@ -39,20 +39,6 @@ The benchmark compares 5 MaxSim scoring implementations across varying document 
 
 _Note: The benchmark results shown above are preliminary and generated in a synthetic test suite. The benchmark setup was generated with AI assistance and has not been independently validated across all production hardware variants. Further validation, profiling, and testing on real-world workloads are planned to ensure strict benchmark authenticity and reproducibility._
 
-### Benchmark Summary (Scaling up to 2,000 Documents)
-
-| Document Count | maxsimd (Fused AVX2) | maxsim-cpu (PyPI) | PyTorch (Loop) | PyTorch (Batched) | NumPy Reference | maxsimd Throughput | Numerical Equivalence |
-| -------------- | -------------------- | ----------------- | -------------- | ----------------- | --------------- | ------------------ | --------------------- |
-| 20             | 0.654 ms             | 0.941 ms          | 1.139 ms       | 2.115 ms          | 1.482 ms        | 30,580 docs/s      | PASS (diff < 1e-3)    |
-| 50             | 1.642 ms             | 1.391 ms          | 2.684 ms       | 4.812 ms          | 3.120 ms        | 30,450 docs/s      | PASS (diff < 1e-3)    |
-| 100            | 2.912 ms             | 2.784 ms          | 4.912 ms       | 9.145 ms          | 5.820 ms        | 34,340 docs/s      | PASS (diff < 1e-3)    |
-| 250            | 5.299 ms             | 5.522 ms          | 13.367 ms      | 26.488 ms         | 16.509 ms       | 47,180 docs/s      | PASS (diff < 1e-3)    |
-| 500            | 7.812 ms             | 7.359 ms          | 24.528 ms      | 48.033 ms         | 27.278 ms       | 64,002 docs/s      | PASS (diff < 1e-3)    |
-| 1,000          | 16.690 ms            | 15.886 ms         | 48.501 ms      | 90.714 ms         | 46.813 ms       | 59,917 docs/s      | PASS (diff < 1e-3)    |
-| 2,000          | 22.042 ms            | 26.246 ms         | 88.694 ms      | 181.428 ms        | 93.627 ms       | 90,737 docs/s      | PASS (diff < 1e-3)    |
-
----
-
 ## Installation
 
 ### Prerequisites
