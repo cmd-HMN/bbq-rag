@@ -17,7 +17,7 @@
 /// Reference
 /// https://www.intel.com/content/www/us/en/docs/onemkl/developer-reference-dpcpp/2023-1/gemm.html
 
-#[cfg(all(target_arch = "x86_64", feature = "mkl"))]
+#[cfg(all(target_arch = "x86_64", feature = "dev"))]
 pub mod mkl_blas {
     use libc::c_char;
 
@@ -759,7 +759,7 @@ mod tests {
         );
 
         unsafe {
-            #[cfg(feature = "mkl")]
+            #[cfg(feature = "dev")]
             mkl_blas::sgemm(
                 transa, transb, m as i32, n as i32, k as i32, alpha, &a, lda as i32, &b,
                 ldb as i32, beta, &mut c_mkl, ldc as i32,

@@ -25,7 +25,7 @@ pub mod function {
 
     use crate::blas::custom::sgemm as csgemm;
 
-    #[cfg(all(target_arch = "x86_64", feature = "mkl"))]
+    #[cfg(all(target_arch = "x86_64", feature = "dev"))]
     use crate::blas::mkl_blas::sgemm as msgemm;
 
     thread_local! {
@@ -89,7 +89,7 @@ pub mod function {
 
     pub mod internal {
         use crate::func::function::{generic_gpro_sgl_doc, csgemm};
-        #[cfg(all(target_arch = "x86_64", feature = "mkl"))]
+        #[cfg(all(target_arch = "x86_64", feature = "dev"))]
         use crate::func::function::msgemm;
 
         pub fn pro_sgl_doc_csgemm(
@@ -111,7 +111,7 @@ pub mod function {
             )
         }
 
-        #[cfg(all(target_arch = "x86_64", feature = "mkl"))]
+        #[cfg(all(target_arch = "x86_64", feature = "dev"))]
         pub fn pro_sgl_doc_msgemm(
             _q: &[f32],
             _d: &[f32],
