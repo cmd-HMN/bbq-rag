@@ -210,6 +210,8 @@ fn maxsim_vrlen<'py>(
 
 #[pymodule]
 fn maxsimd(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add("__version__", env!("CARGO_PKG_VERSION"))?;
+
     m.add_function(wrap_pyfunction!(maxsim, m)?)?;
     m.add_function(wrap_pyfunction!(maxsim_ptr, m)?)?;
     m.add_function(wrap_pyfunction!(maxsim_3d_ptr, m)?)?;
