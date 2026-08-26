@@ -2,7 +2,7 @@
 //! This file contain quantization logic only for 128 dim vectors
 //! Using llama.cpp block apporch
 //! I have only use i8 quantization, only on intel x86_64 arch
-use super::blocks::{QI8, QParmas};
+use super::blocks::{QParmas, QBlock, QData, QI8, QTYPE};
 use core::arch::x86_64::*;
 
 /// qf32_to_qi8
@@ -94,8 +94,7 @@ fn qf32_to_qi8_d128(src: &[f32; QParmas::BLOCK], dst: &mut QI8) {
 }
 
 pub mod qnt {
-    use crate::quantization::blocks::{QBlock, QData, QI8, QTYPE};
-    pub use super::*;
+    use super::{qf32_to_qi8_d128, QParmas, QBlock, QData, QI8, QTYPE};
 
     pub fn qf32_i8_d128(src: &[f32]) -> QBlock {
         let mut blocks = [QI8 {
@@ -125,15 +124,9 @@ pub mod qnt {
             qdata: QData::Int8(blocks),
         }
     }
-}
 
-#[cfg(test)]
-mod tests {
-    use crate::quantization::quantize::qnt::qf32_i8_d128;
-
-    use super::*;
-
-    fn sq32_to_sq8(src: &[f32; 32], dst: &mut [i8; 32], scale: &mut f32) {
+    // moving scaler here 
+    pub fn sq32_to_sq8(src: &[f32; 32], dst: &mut [i8; 32], scale: &mut f32) {
         // Scalar implemeation of the quantization logic
         let mut max: f32 = 0.0;
         for i in 0..32 {
@@ -149,7 +142,7 @@ mod tests {
         }
     }
 
-    fn sq128x32_sq8(src: &[f32; 128], dst: &mut [i8; 128]) {
+    pub fn sq128x32_sq8(src: &[f32; 128], dst: &mut [i8; 128]) {
         for b in 0..4 {
             let mut scale: f32 = 0.0;
             let chunk: &[f32; QParmas::BLOCK] = src[b * 32..(b + 1) * 32].try_into().unwrap();
@@ -158,6 +151,13 @@ mod tests {
             dst[b * 32..(b + 1) * 32].copy_from_slice(&block_dst);
         }
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::quantization::quantize::qnt::{qf32_i8_d128, sq32_to_sq8, sq128x32_sq8};
+
+    use super::*;
 
     fn checking_logic(dst1: &[i8; 32], dst2: &[i8; 32], s1: &mut f32, s2: &mut f32) {
         // for scale
