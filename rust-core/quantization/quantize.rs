@@ -18,8 +18,8 @@ use core::arch::x86_64::*;
 ///
 /// # Note
 /// FBGEMM (1 float per iteration)
-/// Other apparch was used in llama.cpp has 4 floats per iteration 
-/// As the quantization is done for 128 dim vectors so and 
+/// Other apparch was used in llama.cpp has 4 floats per iteration
+/// As the quantization is done for 128 dim vectors so and
 /// 128 / 32 = 4 blocks and it is proper multiple of 32 so llama.cpp apporch is used here.
 #[cfg(target_feature = "avx2")]
 #[inline(never)]
@@ -48,7 +48,11 @@ fn qf32_to_qi8(src: &[f32; QParmas::BLOCK], dst: &mut QI8) {
         //scaling
         let scale: f32 = maximum / 127.0f32;
         dst.scale = scale;
-        let iscale: f32 = if maximum > 1e-12 { 127.0 / maximum } else { 0.0 };
+        let iscale: f32 = if maximum > 1e-12 {
+            127.0 / maximum
+        } else {
+            0.0
+        };
         let mul: __m256 = _mm256_set1_ps(iscale);
 
         // quantization
@@ -76,8 +80,8 @@ fn qf32_to_qi8(src: &[f32; QParmas::BLOCK], dst: &mut QI8) {
         let i3: __m256i = _mm256_cvtps_epi32(v3);
 
         // packing
-        i0 = _mm256_packus_epi32(i0, i1);
-        i2 = _mm256_packus_epi32(i2, i3);
+        i0 = _mm256_packs_epi32(i0, i1);
+        i2 = _mm256_packs_epi32(i2, i3);
 
         i0 = _mm256_packs_epi16(i0, i2);
 
@@ -86,7 +90,6 @@ fn qf32_to_qi8(src: &[f32; QParmas::BLOCK], dst: &mut QI8) {
 
         // store
         _mm256_storeu_si256(dst.data.as_mut_ptr() as *mut __m256i, i0);
-
     }
 }
 
@@ -98,7 +101,7 @@ mod tests {
         // Scalar implemeation of the quantization logic
         let mut max: f32 = 0.0;
         for i in 0..32 {
-            max = max.max(src[i]);
+            max = max.max(src[i].abs());
         }
 
         //scale
@@ -117,21 +120,27 @@ mod tests {
 
         // for destination
         for i in 0..32 {
-            assert_eq!(dst1[i], dst2[i], "Destination Mismatch {} {} at index {}", dst1[i], dst2[i], i);
+            assert_eq!(
+                dst1[i], dst2[i],
+                "Destination Mismatch {} {} at index {}",
+                dst1[i], dst2[i], i
+            );
         }
     }
-    
+
     // Assumming all values are in 32 blocks
     // helper temoate for qi8
-    fn ht_qi8(value: &[f32; 32]){
+    fn ht_qi8(value: &[f32; 32]) {
         let mut sdst: [i8; 32] = [0; 32];
         let mut ss: f32 = 0.0;
         //scaler part
         sq32_to_sq8(value, &mut sdst, &mut ss);
 
-
         // avx2 part
-        let mut block: QI8 = QI8 { scale: 0.0, data: [0; 32]};
+        let mut block: QI8 = QI8 {
+            scale: 0.0,
+            data: [0; 32],
+        };
         qf32_to_qi8(value, &mut block);
         checking_logic(&block.data, &sdst, &mut block.scale, &mut ss);
     }
@@ -139,7 +148,7 @@ mod tests {
     #[test]
     fn test_qf32_to_qi8_correctness() {
         let input: [f32; 32] = [
-            0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0,    
+            0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0,
             16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 28.0, 29.0,
             30.0, 31.0,
         ];
@@ -148,12 +157,32 @@ mod tests {
     }
 
     #[test]
-    fn test_qf32_to_qi8_neg_ext(){
+    fn test_qf32_to_qi8_neg_ext() {
         let mut input = [0.0f32; 32];
         input[0] = -1.0;
         input[1] = 1.0;
         input[2] = 0.0;
         input[3] = -0.5;
         ht_qi8(&input);
+    }
+
+    #[test]
+    fn test_qf32_to_qi8_zero() {
+        let input = [0.0f32; 32];
+        // now need to run scalar one but what can we do now
+        ht_qi8(&input);
+    }
+
+    #[test]
+    fn test_qf32_to_qi8_rad() {
+        use rand::{Rng, thread_rng};
+        let mut rng = thread_rng();
+        let mut input = [0.0f32; 32];
+        for _ in 0..100 {
+            for i in 0..32 {
+                input[i] = rng.gen_range(-1.0..1.0);
+            }
+            ht_qi8(&input);
+        }
     }
 }
