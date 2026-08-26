@@ -1,24 +1,28 @@
-pub const BASE_DIMS: usize = 128;
-pub const BLOCK: usize = 32;
-pub const BLOCK_SIZE: usize = BASE_DIMS / BLOCK;
+pub struct QParmas;
+
+impl QParmas {
+    pub const BASE_DIMS: usize = 128;
+    pub const BLOCK: usize = 32;
+    pub const BLOCK_SIZE: usize = QParmas::BASE_DIMS / QParmas::BLOCK;
+}
 
 #[repr(C, align(32))]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct QF32 {
-    pub data: [f32; BLOCK],
+    pub data: [f32; QParmas::BLOCK],
 }
 
 #[repr(C, align(32))]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct QI8 {
     pub scale: f32,
-    pub data: [i8; BLOCK],
+    pub data: [i8; QParmas::BLOCK],
 }
 
 #[repr(C, align(4))]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct QBin {
-    pub data: [u8; BLOCK],
+    pub data: [u8; QParmas::BLOCK],
 }
 
 // Default will be Float32
@@ -32,17 +36,17 @@ pub enum QTYPE {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum QData {
-    Binary([QBin; BLOCK_SIZE]),
-    Int8([QI8; BLOCK_SIZE]),
-    Float32([QF32; BLOCK_SIZE]),
+    Binary([QBin; QParmas::BLOCK_SIZE]),
+    Int8([QI8; QParmas::BLOCK_SIZE]),
+    Float32([QF32; QParmas::BLOCK_SIZE]),
 }
 
 impl Default for QData {
     fn default() -> Self {
         QData::Float32(
             [QF32 {
-                data: [0.0; BLOCK],
-            }; BLOCK_SIZE],
+                data: [0.0; QParmas::BLOCK],
+            }; QParmas::BLOCK_SIZE],
         )
     }
 }
@@ -57,6 +61,11 @@ impl QData {
     }
 
     pub fn dims(&self) -> usize {
-        BLOCK_SIZE * BLOCK
+        QParmas::BLOCK_SIZE * QParmas::BLOCK
     }
+}
+
+pub struct QBlock {
+    pub qtype: QTYPE,
+    pub qdata: QData,
 }
