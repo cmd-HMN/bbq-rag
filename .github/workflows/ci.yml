@@ -46,7 +46,7 @@ jobs:
       # 7. Build and install maxsimd CPython extension via Maturin
       - name: Build and install maxsimd (Release)
         run: |
-          maturin develop --release
+          pip install .
 
       # 8. Check version and exported functions
       - name: Verify maxsimd version and exports
