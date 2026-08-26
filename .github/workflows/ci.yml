@@ -1,0 +1,78 @@
+name: maxsimd
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  maxsimd:
+    name: Build & Test (Rust + Python)
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Checkout repository
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Setup Rust toolchain
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      # 3. Cache Rust dependencies for fast builds
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+
+      # 4. Set up Python environment
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      # 5. Run Rust Cargo Tests (with dev features enabled for MKL/BLAS)
+      - name: Run Cargo Tests
+        run: |
+          cargo test --verbose --features dev
+
+      # 6. Install Python build tools and dependencies
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install maturin numpy pytest
+
+      # 7. Build and install maxsimd CPython extension via Maturin
+      - name: Build and install maxsimd (Release)
+        run: |
+          maturin develop --release
+
+      # 8. Check version and exported functions
+      - name: Verify maxsimd version and exports
+        run: |
+          python -c "
+          import maxsimd
+          version = getattr(maxsimd, '__version__', 'N/A')
+          print('=' * 50)
+          print(f'MaxSimD Version: {version}')
+          print('Exported functions:', [item for item in dir(maxsimd) if not item.startswith('__')])
+          print('=' * 50)
+          "
+
+      # 9. Run a fast MaxSim computation smoke test
+      - name: Run MaxSim Python smoke test
+        run: |
+          python -c "
+          import maxsimd
+          import numpy as np
+
+          # 32 query tokens, 256 document tokens, 128 dimension
+          q = np.random.randn(32, 128).astype(np.float32)
+          d = np.random.randn(256, 128).astype(np.float32)
+          
+          score = maxsimd.maxsim(q, d)
+          print('Calculated MaxSim score successfully:', score)
+          assert len(score) == 1
+          assert isinstance(score[0], float)
+          "
