@@ -5,7 +5,7 @@ use maxsimd::func::function::maxsim_variable_length;
 use maxsimd::quantization::quantize::qnt::{qf32_i8_d128, sq128x32_sq8};
 
 use pprof::criterion::{Output, PProfProfiler};
-use rand::Rng;
+use rand::{Rng, thread_rng};
 
 macro_rules! single_func_benchmark {
     (
@@ -74,25 +74,26 @@ macro_rules! single_func_benchmark {
             )
         });
     }};
-    
-    // for other function with some expr 
+
+    // for other function with some expr
     (
         $grp: expr,
         throughput => $thput: expr,
-        $func: expr,
-        $(args: expr)*
+        $name: expr,
+        $func: expr
+        $(, $args: expr)*
     ) => {{
         $grp.throughput($thput);
-        $grp.bench_function($func, |b| {
+        $grp.bench_function($name, |b| {
             b.iter(
                 || {
                     black_box($func(
-                        $(black_box(args))*
+                        $(black_box($args)),* 
                     ))
                 },
             )
         });
-    }} 
+    }}
 }
 
 fn bench_cpu_level_1(c: &mut Criterion) {
@@ -215,13 +216,49 @@ fn bench_cpu_level_2(c: &mut Criterion) {
     group.finish();
 }
 
-fn bench_quant(c: &mut Criterion) {}
+fn bench_quant(c: &mut Criterion) {
+    let mut group = c.benchmark_group("Quantization");
+
+    // keeping same dim as colbert
+    const DIM: usize = 128;
+    let mut rng = thread_rng();
+
+    // based on  dim
+    let mut arr: [f32; DIM] = [0.0f32; DIM];
+    //making array a little bit creepy
+    for i in 0..DIM {
+        arr[i] = rng.gen_range(-1.0..1.0);
+    }
+    
+    let mut dst: [i8; DIM] = [0; DIM];
+
+    // now benchmarking
+
+    single_func_benchmark!(
+        group,
+        throughput => Throughput::Elements(DIM as u64),
+        BenchmarkId::new("qf32_i8_d128", DIM),
+        qf32_i8_d128,
+        &arr
+    );
+
+    single_func_benchmark!(
+        group,
+        throughput => Throughput::Elements(DIM as u64),
+        BenchmarkId::new("sq128x32_sq8", DIM),
+        sq128x32_sq8,
+        &arr,
+        &mut dst
+    );
+
+    group.finish();
+}
 
 criterion_group!(
     name=benches;
     // 100sec
     config = Criterion::default().with_profiler(PProfProfiler::new(100, Output::Flamegraph(None)));
-    targets = bench_cpu_level_1, bench_cpu_level_2
+    targets = bench_cpu_level_1, bench_cpu_level_2, bench_quant
 );
 
 criterion_main!(benches);
