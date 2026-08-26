@@ -1,6 +1,6 @@
 [package]
 name = "maxsimd"
-version = "0.1.0"
+version = "0.1.0-alpha"
 edition = "2024"
 homepage = "https://github.com/cmd-HMN"
 description = "This packages is the simd implementations of max sim function for faster calculation"
