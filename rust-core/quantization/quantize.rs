@@ -1,8 +1,8 @@
 //! Quantization
 //! This file contain quantization logic only for 128 dim vectors
 //! Using llama.cpp block apporch
-
-use super::blocks::{QI8, QParmas};
+//! I have only use i8 quantization, only on intel x86_64 arch
+use super::blocks::{QParmas, QBlock, QData, QI8, QTYPE};
 use core::arch::x86_64::*;
 
 /// qf32_to_qi8
@@ -22,8 +22,8 @@ use core::arch::x86_64::*;
 /// As the quantization is done for 128 dim vectors so and
 /// 128 / 32 = 4 blocks and it is proper multiple of 32 so llama.cpp apporch is used here.
 #[cfg(target_feature = "avx2")]
-#[inline(never)]
-fn qf32_to_qi8(src: &[f32; QParmas::BLOCK], dst: &mut QI8) {
+#[inline(always)]
+fn qf32_to_qi8_d128(src: &[f32; QParmas::BLOCK], dst: &mut QI8) {
     let ptr = src.as_ptr();
     unsafe {
         let mut v0 = _mm256_loadu_ps(ptr);
@@ -93,11 +93,40 @@ fn qf32_to_qi8(src: &[f32; QParmas::BLOCK], dst: &mut QI8) {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+pub mod qnt {
+    use super::{qf32_to_qi8_d128, QParmas, QBlock, QData, QI8, QTYPE};
 
-    fn sq32_to_sq8(src: &[f32; 32], dst: &mut [i8; 32], scale: &mut f32) {
+    pub fn qf32_i8_d128(src: &[f32]) -> QBlock {
+        let mut blocks = [QI8 {
+            scale: 0.0, 
+            data: [0; 32],
+        }; QParmas::BLOCK_SIZE];
+
+        let ptr = src.as_ptr();
+
+        // making chunks of src
+        let arr: [&[f32; QParmas::BLOCK]; QParmas::BLOCK_SIZE] = unsafe {
+            [
+                &*(ptr as *const [f32; 32]),
+                &*(ptr.add(32) as *const [f32; 32]),
+                &*(ptr.add(64) as *const [f32; 32]),
+                &*(ptr.add(96) as *const [f32; 32]),
+            ]
+        };
+
+        qf32_to_qi8_d128(&arr[0], &mut blocks[0]);
+        qf32_to_qi8_d128(&arr[1], &mut blocks[1]);
+        qf32_to_qi8_d128(&arr[2], &mut blocks[2]);
+        qf32_to_qi8_d128(&arr[3], &mut blocks[3]);
+
+        QBlock {
+            qtype: QTYPE::Int8,
+            qdata: QData::Int8(blocks),
+        }
+    }
+
+    // moving scaler here 
+    pub fn sq32_to_sq8(src: &[f32; 32], dst: &mut [i8; 32], scale: &mut f32) {
         // Scalar implemeation of the quantization logic
         let mut max: f32 = 0.0;
         for i in 0..32 {
@@ -112,6 +141,23 @@ mod tests {
             dst[i] = (src[i] * iscale).round().clamp(-128.0, 127.0) as i8;
         }
     }
+
+    pub fn sq128x32_sq8(src: &[f32; 128], dst: &mut [i8; 128]) {
+        for b in 0..4 {
+            let mut scale: f32 = 0.0;
+            let chunk: &[f32; QParmas::BLOCK] = src[b * 32..(b + 1) * 32].try_into().unwrap();
+            let mut block_dst = [0i8; QParmas::BLOCK];
+            sq32_to_sq8(chunk, &mut block_dst, &mut scale);
+            dst[b * 32..(b + 1) * 32].copy_from_slice(&block_dst);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::quantization::quantize::qnt::{qf32_i8_d128, sq32_to_sq8, sq128x32_sq8};
+
+    use super::*;
 
     fn checking_logic(dst1: &[i8; 32], dst2: &[i8; 32], s1: &mut f32, s2: &mut f32) {
         // for scale
@@ -129,7 +175,7 @@ mod tests {
     }
 
     // Assumming all values are in 32 blocks
-    // helper temoate for qi8
+    // helper temoate for qi8 for internal funciton
     fn ht_qi8(value: &[f32; 32]) {
         let mut sdst: [i8; 32] = [0; 32];
         let mut ss: f32 = 0.0;
@@ -141,8 +187,23 @@ mod tests {
             scale: 0.0,
             data: [0; 32],
         };
-        qf32_to_qi8(value, &mut block);
+        qf32_to_qi8_d128(value, &mut block);
         checking_logic(&block.data, &sdst, &mut block.scale, &mut ss);
+    }
+
+    // helper templete for qnt function
+    fn ht_q128x32_i8(value: &[f32; 128]){
+        let mut sdst = [0i8; QParmas::BASE_DIMS];
+
+        sq128x32_sq8(value, &mut sdst);
+       
+        let qblock = qf32_i8_d128(value);
+        let qdst: [i8; QParmas::BASE_DIMS] = qblock.to_array().unwrap();
+
+        for i in 0..QParmas::BASE_DIMS {
+            assert_eq!(sdst[i], qdst[i], "Destination Mismatch {} {}", sdst[i], qdst[i]);
+        }
+
     }
 
     #[test]
@@ -184,5 +245,67 @@ mod tests {
             }
             ht_qi8(&input);
         }
+    }
+
+
+    //======== Main Fuction ===========\\
+        
+    #[test]
+    fn test_qf32_to_qi8_d128_correctness() {
+        let input = [0.0f32; 128];
+        ht_q128x32_i8(&input);
+    }
+
+    #[test]
+    fn test_qf32_to_qi8_d128_rad() {
+        use rand::{Rng, thread_rng};
+        let mut rng = thread_rng();
+        let mut input = [0.0f32; 128];
+        for _ in 0..100 {
+            for i in 0..128 {
+                input[i] = rng.gen_range(-1.0..1.0);
+            }
+            ht_q128x32_i8(&input);
+        }
+    }
+
+    #[test]
+    fn test_qf32_to_qi8_d128_type_mismatch_error() {
+        let input = [1.0f32; QParmas::BASE_DIMS];
+        let qblock = qnt::qf32_i8_d128(&input);
+
+        // Asking to a big heart
+        let res: Result<[f32; QParmas::BASE_DIMS], &'static str> = qblock.to_array();
+
+        // println!("res: {}", res.is_err());
+        // Damn stone heart
+        assert!(res.is_err(), "Must return Err when requesting Float32 from an Int8 QBlock!");
+        assert_eq!(
+            res.unwrap_err(),
+            "You are initializing with wrong datatype, its not Float32"
+        );
+    }
+
+
+    // Teseting if the scales are independent
+    #[test]
+    fn test_qf32_to_qi8_d128_independent_block_scales() {
+        let mut input = [0.0f32; QParmas::BASE_DIMS];
+
+        for i in 0..32 { input[i] = 100.0; }
+        for i in 32..64 { input[i] = 0.01; }
+        for i in 64..96 { input[i] = 0.0; }
+        for i in 96..128 { input[i] = -0.01; }
+
+        ht_q128x32_i8(&input);
+    }
+
+    #[test]
+    fn test_qf32_to_qi8_d128_sequence() {
+        let mut input = [0.0f32; QParmas::BASE_DIMS];
+        for i in 0..QParmas::BASE_DIMS {
+            input[i] = (i as f32) * 0.5;
+        }
+        ht_q128x32_i8(&input);
     }
 }
