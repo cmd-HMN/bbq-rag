@@ -137,7 +137,16 @@ pub mod qnt {
         //get inverse scale
         let iscale = if max > 1e-12 { 127.0 / max } else { 0.0 };
         for i in 0..32 {
-            dst[i] = (src[i] * iscale).round().clamp(-128.0, 127.0) as i8;
+            // round vs round_ties_even
+            // round change like 29.5 t0 30 but round_ties_even changes to 29 and its matches our
+            // simd implemeation
+            // FIX: during the build failure 
+            // thread 'quantization::quantize::tests::test_qf32_to_qi8_d128_rad' (6782) 
+            // panicked at rust-core/quantization/quantize.rs:207:13:
+            // assertion `left == right` failed: Destination Mismatch 49 48
+            // left: 49 round was changing this to 49 instead of 48
+            // right: 48
+            dst[i] = (src[i] * iscale).round_ties_even().clamp(-128.0, 127.0) as i8;
         }
     }
 
