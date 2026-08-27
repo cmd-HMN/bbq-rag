@@ -80,7 +80,6 @@ impl Default for QBlock {
     }
 }
 
-//======================================== QBlock Functions ======================================\
 impl QBlock {
     pub fn new(qtype: QTYPE, qdata: QData) -> Self {
         QBlock { qtype, qdata }
@@ -101,14 +100,18 @@ impl QBlock {
 // for type f32
 impl TryFrom<QData> for [f32; QParmas::BASE_DIMS] {
     type Error = &'static str;
+
     fn try_from(qdata: QData) -> Result<Self, Self::Error> {
+        
         match qdata {
             QData::Float32(blocks) => {
                 let mut out = [0f32; QParmas::BASE_DIMS];
+
                 for (i, blk) in blocks.iter().enumerate() {
                     let start = i * QParmas::BLOCK;
                     out[start..start + QParmas::BLOCK].copy_from_slice(&blk.data);
                 }
+
                 Ok(out)
             }
             _ => Err("You are initializing with wrong datatype, its not Float32"),
@@ -116,17 +119,22 @@ impl TryFrom<QData> for [f32; QParmas::BASE_DIMS] {
     }
 }
 
-// for type i8 
+// for type i8
 impl TryFrom<QData> for [i8; QParmas::BASE_DIMS] {
     type Error = &'static str;
+    
     fn try_from(qdata: QData) -> Result<Self, Self::Error> {
+        
         match qdata {
+            
             QData::Int8(blocks) => {
                 let mut out = [0i8; QParmas::BASE_DIMS];
+            
                 for (i, blk) in blocks.iter().enumerate() {
                     let start = i * QParmas::BLOCK;
                     out[start..start + QParmas::BLOCK].copy_from_slice(&blk.data);
                 }
+                
                 Ok(out)
             }
             _ => Err("You are initializing with wrong datatype, its not Int8"),
@@ -135,15 +143,20 @@ impl TryFrom<QData> for [i8; QParmas::BASE_DIMS] {
 }
 
 impl TryFrom<QData> for [u8; QParmas::BASE_DIMS] {
+    
     type Error = &'static str;
+
     fn try_from(qdata: QData) -> Result<Self, Self::Error> {
+    
         match qdata {
             QData::Binary(blocks) => {
                 let mut out = [0u8; QParmas::BASE_DIMS];
+                
                 for (i, blk) in blocks.iter().enumerate() {
                     let start = i * QParmas::BLOCK;
                     out[start..start + QParmas::BLOCK].copy_from_slice(&blk.data);
                 }
+                
                 Ok(out)
             }
             _ => Err("You are initializing with wrong datatype, its not Binary"),
