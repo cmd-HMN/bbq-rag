@@ -205,7 +205,9 @@ fn maxsim_vrlen<'py>(
     let q_slice = q.as_slice().expect("q must be contiguous");
     let d_slice = d.as_slice().expect("d must be contiguous");
 
-    func::function::maxsim_variable_length_slice(q_slice, d_slice, &doc_lengths, q_len, dim)
+    //TODO
+    //WIll change in the next commit
+    blas::maxsim_variable_length_slice(q_slice, d_slice, &doc_lengths, q_len, dim)
 }
 
 #[pymodule]

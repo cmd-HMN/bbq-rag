@@ -1,7 +1,8 @@
 use criterion::{BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main};
 use maxsimd::cpu::vec256::simd::{fused_dot_max_dim128_avx2, fused_dot_max_generic_avx2};
-use maxsimd::func::function::internal::pro_sgl_doc_msgemm;
-use maxsimd::func::function::maxsim_variable_length;
+use maxsimd::blas::pro_sgl_doc_msgemm;
+// Will change in future updates
+use maxsimd::blas::maxsim_variable_length;
 use maxsimd::quantization::quantize::qnt::{qf32_i8_d128, sq128x32_sq8};
 
 use pprof::criterion::{Output, PProfProfiler};
