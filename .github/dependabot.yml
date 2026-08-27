@@ -11,6 +11,10 @@ updates:
       - "rust"
     commit-message:
       prefix: "chore(deps)"
+    ignore:
+      # Ignore breaking major updates for rand (stays on 0.8.x)
+      - dependency-name: "rand"
+        update-types: ["version-update:semver-major"]
     groups:
       rust-dependencies:
         patterns:
