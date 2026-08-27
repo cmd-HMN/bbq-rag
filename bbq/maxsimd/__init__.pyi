@@ -5,9 +5,50 @@ import builtins
 import numpy
 import numpy.typing
 import typing
+
 __all__ = [
+    "maxsim",
+    "maxsim_3d_ptr",
+    "maxsim_ptr",
     "maxsim_vrlen",
 ]
 
-def maxsim_vrlen(q: numpy.typing.NDArray[numpy.float32], d: numpy.typing.NDArray[numpy.float32], doc_lengths: typing.Sequence[builtins.int], q_len: builtins.int, dim: builtins.int) -> builtins.list[builtins.float]: ...
+def maxsim(
+    q: numpy.typing.NDArray[numpy.float32], d: numpy.typing.NDArray[numpy.float32]
+) -> builtins.list[builtins.float]:
+    r"""
+    MaxSim scoring supporting 2D and 3D NumPy arrays with zero Python overhead.
+    """
 
+def maxsim_3d_ptr(
+    q_ptr: builtins.int,
+    d_ptr: builtins.int,
+    q_len: builtins.int,
+    num_pages: builtins.int,
+    tokens_per_page: builtins.int,
+    dim: builtins.int,
+) -> builtins.list[builtins.float]:
+    r"""
+    Ultra-fast pointer-based MaxSim for 3D PyTorch tensors (`tensor.data_ptr()`).
+    """
+
+def maxsim_ptr(
+    q_ptr: builtins.int,
+    d_ptr: builtins.int,
+    q_len: builtins.int,
+    doc_tokens: builtins.int,
+    dim: builtins.int,
+) -> builtins.float:
+    r"""
+    Ultra-fast pointer-based MaxSim for 2D PyTorch tensors (`tensor.data_ptr()`).
+    """
+
+def maxsim_vrlen(
+    q: numpy.typing.NDArray[numpy.float32],
+    d: numpy.typing.NDArray[numpy.float32],
+    doc_lengths: typing.Sequence[builtins.int],
+    q_len: builtins.int,
+    dim: builtins.int,
+) -> builtins.list[builtins.float]: ...
+
+__version__ = "0.1.0-alpha"
