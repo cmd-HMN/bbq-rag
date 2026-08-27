@@ -55,3 +55,8 @@ name = "bench"
 harness = false
 path = "rust-core/benches/bench.rs"
 required-features = ["dev"]
+
+# rust tests
+[[test]]
+name = "rtest"
+path = "rust-core/tests/mod.rs"
