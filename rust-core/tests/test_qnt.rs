@@ -1,6 +1,7 @@
 // tests for quantization
 
 use maxsimd::quantization::{QParmas, qf32_i8_d128, sq128x32_sq8};
+use rand::random_range;
 
 // helper templete for qnt function
 fn ht_q128x32_i8(value: &[f32; 128]) {
@@ -26,12 +27,10 @@ fn test_qf32_to_qi8_d128_correctness() {
 }
 
 fn test_qf32_to_qi8_d128_rad() {
-    use rand::{Rng, thread_rng};
-    let mut rng = thread_rng();
     let mut input = [0.0f32; 128];
     for _ in 0..100 {
         for i in 0..128 {
-            input[i] = rng.gen_range(-1.0..1.0);
+            input[i] = random_range(-1.0..1.0);
         }
         ht_q128x32_i8(&input);
     }
@@ -85,35 +84,28 @@ fn test_qf32_to_qi8_d128_sequence() {
 }
 
 // check the largest values are clamp properly
-fn test_qf32_to_qi8_d128_saturation(){
+fn test_qf32_to_qi8_d128_saturation() {
     let mut input = [0.0f32; QParmas::BASE_DIMS];
-    use rand::{Rng, thread_rng};
-    let mut rng = thread_rng();
 
     for i in 0..QParmas::BASE_DIMS {
-        input[i] = rng.gen_range(-4242.0..424200.0);
+        input[i] = random_range(-4242.0..424200.0);
     }
     ht_q128x32_i8(&input);
 }
 
-fn test_qf32_to_qi8_d128_type_near_zero(){
+fn test_qf32_to_qi8_d128_type_near_zero() {
     let mut input = [0.0f32; QParmas::BASE_DIMS];
-    use rand::{Rng, thread_rng};
-    let mut rng = thread_rng();
-
     for i in 0..QParmas::BASE_DIMS {
-        input[i] = rng.gen_range(1e-15..1e-10);
+        input[i] = random_range(1e-15..1e-10);
     }
     ht_q128x32_i8(&input);
 }
 
-fn test_qf32_to_qi8_d128_edge_of_hell(){
+fn test_qf32_to_qi8_d128_edge_of_hell() {
     let mut input = [0.0f32; QParmas::BASE_DIMS];
-    use rand::{Rng, thread_rng};
-    let mut rng = thread_rng();
 
     for i in 0..QParmas::BASE_DIMS {
-        input[i] = rng.gen_range(-127.0..127.0);
+        input[i] = random_range(-127.0..127.0);
     }
     ht_q128x32_i8(&input);
 }
