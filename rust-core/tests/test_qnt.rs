@@ -121,14 +121,14 @@ fn test_qf32_to_qi8_d128_edge_of_hell(){
 // q here is for quantization
 test_me! {
     group quantization {
-        qcorrectness: test_qf32_to_qi8_d128_correctness,
-        qrandom_fuzz: test_qf32_to_qi8_d128_rad,
-        qscales:      test_qf32_to_qi8_d128_independent_block_scales,
-        qsequence:    test_qf32_to_qi8_d128_sequence,
+        correctness: test_qf32_to_qi8_d128_correctness,
+        random_fuzz: test_qf32_to_qi8_d128_rad,
+        scales:      test_qf32_to_qi8_d128_independent_block_scales,
+        sequence:    test_qf32_to_qi8_d128_sequence,
         #[should_panic]
-        qmismatch:    test_qf32_to_qi8_d128_type_mismatch_error,
-        qsaturation:  test_qf32_to_qi8_d128_saturation,
-        qnear_zero:   test_qf32_to_qi8_d128_type_near_zero,
-        qedge_of_hell: test_qf32_to_qi8_d128_edge_of_hell
+        mismatch:    test_qf32_to_qi8_d128_type_mismatch_error,
+        saturation:  test_qf32_to_qi8_d128_saturation,
+        near_zero:   test_qf32_to_qi8_d128_type_near_zero,
+        edge_of_hell: test_qf32_to_qi8_d128_edge_of_hell
     }
 }
