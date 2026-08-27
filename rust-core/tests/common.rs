@@ -16,13 +16,23 @@ macro_rules! test_me {
 
     // passign batch of test to it
     (
-        $func: expr;
-        $(
-            $(#[$attr:meta])*
-            $name: ident,
-            $(, $arg: expr)*
-        ), * $(,)?
+        group $grp: ident {
+            $(
+                $(#[$attr:meta])*
+                $name: ident: $func: ident $(( $($arg:expr),* ))?
+            ),* $(,)?
+        }
     ) => {
-        $test_me!($(#[$attr])* $name, $func, $(, $arg)*);
+        mod $grp {
+            use super::*;
+            $(
+                $(#[$attr])*
+                #[test]
+                fn $name() {
+                    $func($($arg),*);
+                }
+            )*
+        }
     }
+  
 }
