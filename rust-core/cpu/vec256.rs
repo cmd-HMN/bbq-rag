@@ -25,12 +25,12 @@ pub mod simd {
     use std::arch::x86_64::*;
 
     #[inline(always)]
-    pub fn load_vec256(data: &[f32], offset: usize) -> __m256 {
+    fn load_vec256(data: &[f32], offset: usize) -> __m256 {
         unsafe { _mm256_loadu_ps(data.as_ptr().add(offset)) }
     }
 
     #[inline(always)]
-    pub unsafe fn horizontal_sum(a: __m256) -> f32 {
+    unsafe fn horizontal_sum(a: __m256) -> f32 {
         unsafe {
             let high = _mm256_extractf128_ps(a, 1);
             let low = _mm256_castps256_ps128(a);
@@ -43,7 +43,7 @@ pub mod simd {
         }
     }
 
-    pub fn horizontal_max(a: __m256) -> f32 {
+    fn horizontal_max(a: __m256) -> f32 {
         unsafe {
             let _high = _mm256_extractf128_ps(a, 1);
             let _low = _mm256_castps256_ps128(a);
@@ -108,7 +108,7 @@ pub mod simd {
     }
 
     #[inline(always)]
-    pub fn hs_4x(
+    fn hs_4x(
         a0: __m256,
         a1: __m256,
         a2: __m256,
@@ -358,12 +358,6 @@ pub mod simd {
         }
         total
     }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use rand::{Rng, thread_rng};
 
     pub fn naive_maxsim_dim128(q: &[f32], d: &[f32], q_len: usize, d_len: usize) -> f32 {
         if q_len == 0 || d_len == 0 {
@@ -388,102 +382,7 @@ mod tests {
         total_score
     }
 
-    fn max_scalar(a: &[f32]) -> f32 {
-        a.iter().copied().fold(f32::NEG_INFINITY, f32::max)
-    }
-
-    fn generate_data(len: usize) -> Vec<f32> {
-        let mut rng = thread_rng();
-        (0..(len * 128)).map(|_| rng.gen_range(-1.0..1.0)).collect()
-    }
-
-    fn assert_approx_eq(a: f32, b: f32) {
-        let epsilon = 1e-4; // Margin of error for floating point reordering
-        assert!(
-            (a - b).abs() < epsilon,
-            "Mismatch: SIMD {} vs Naive {}",
-            a,
-            b
-        );
-    }
-
-    fn assert_max_eq(input: &[f32]) {
-        let expected = max_scalar(input);
-        let got = simd::max_avx2(input);
-        assert_eq!(
-            got, expected,
-            "max mismatch for input {:?}\n  expected: {}\n  got:      {}",
-            input, expected, got
-        );
-    }
-
-    #[test]
-    fn test_vec256_empty_slice() {
-        assert_max_eq(&[]);
-    }
-
-    #[test]
-    fn test_vec256_single_element() {
-        assert_max_eq(&[42.0]);
-        assert_max_eq(&[-3.14]);
-    }
-
-    #[test]
-    fn test_vec256_two_elements() {
-        assert_max_eq(&[1.0, 2.0]);
-        assert_max_eq(&[2.0, 1.0]);
-    }
-
-    #[test]
-    fn test_vec256_all_same() {
-        assert_max_eq(&[5.0; 100]);
-    }
-
-    #[test]
-    fn test_vec256_strictly_increasing() {
-        let v: Vec<f32> = (0..100).map(|i| i as f32).collect();
-        assert_max_eq(&v);
-    }
-
-    #[test]
-    fn test_vec256_strictly_decreasing() {
-        let v: Vec<f32> = (0..100).map(|i| 99.0 - i as f32).collect();
-        assert_max_eq(&v);
-    }
-
-    #[test]
-    fn test_vec256_negatives_and_positives() {
-        assert_max_eq(&[-1.0, -5.0, -2.0, 0.0, -10.0]);
-        assert_max_eq(&[-100.0, 100.0, -50.0, 50.0]);
-    }
-
-    #[test]
-    fn test_vec256_around_alignment_boundaries() {
-        for len in 1..=40 {
-            let v: Vec<f32> = (0..len).map(|i| (len - i) as f32).collect();
-            assert_max_eq(&v);
-        }
-    }
-
-    #[test]
-    fn test_vec256_contains_neg_inf() {
-        assert_max_eq(&[f32::NEG_INFINITY, 1.0, 2.0]);
-        assert_max_eq(&[f32::NEG_INFINITY; 50]);
-    }
-
-    #[test]
-    fn test_vec256_contains_infinity() {
-        assert_max_eq(&[1.0, f32::INFINITY, 2.0]);
-    }
-
-    #[test]
-    fn test_vec256_contains_nan() {
-        let expected = max_scalar(&[f32::NAN, 1.0, 2.0]);
-        let got = simd::max_avx2(&[f32::NAN, 1.0, 2.0]);
-        assert_eq!(got.is_nan(), expected.is_nan(), "NaN handling mismatch");
-    }
-
-    fn reference_maxsim(q: &[f32], d: &[f32], q_len: usize, d_len: usize, dim: usize) -> f32 {
+    pub fn reference_maxsim(q: &[f32], d: &[f32], q_len: usize, d_len: usize, dim: usize) -> f32 {
         let mut total = 0.0f32;
         for qi in 0..q_len {
             let mut max_dot = f32::NEG_INFINITY;
@@ -501,93 +400,5 @@ mod tests {
             }
         }
         total
-    }
-
-    #[test]
-    fn test_fused_dot_max_dim128() {
-        let q_len = 10;
-        let d_len = 25;
-        let dim = 128;
-        let q: Vec<f32> = (0..q_len * dim)
-            .map(|i| ((i % 17) as f32 - 8.0) * 0.1)
-            .collect();
-        let d: Vec<f32> = (0..d_len * dim)
-            .map(|i| ((i % 19) as f32 - 9.0) * 0.1)
-            .collect();
-
-        let expected = reference_maxsim(&q, &d, q_len, d_len, dim);
-        let got_128 = unsafe { simd::fused_dot_max_dim128_avx2(&q, &d, q_len, d_len) };
-        let got_generic = unsafe { simd::fused_dot_max_generic_avx2(&q, &d, q_len, d_len, dim) };
-
-        assert!(
-            (got_128 - expected).abs() < 1e-4,
-            "got_128: {}, expected: {}",
-            got_128,
-            expected
-        );
-        assert!(
-            (got_generic - expected).abs() < 1e-4,
-            "got_generic: {}, expected: {}",
-            got_generic,
-            expected
-        );
-    }
-
-    #[test]
-    fn test_simd_correctness_standard_batch() {
-        let q_len = 32; // Divides perfectly by 4
-        let d_len = 100;
-        let q = generate_data(q_len);
-        let d = generate_data(d_len);
-
-        let naive_score = naive_maxsim_dim128(&q, &d, q_len, d_len);
-        let simd_score = unsafe { simd::fused_dot_max_dim128_avx2(&q, &d, q_len, d_len) };
-        assert_approx_eq(simd_score, naive_score);
-    }
-
-    #[test]
-    fn test_simd_correctness_leftovers() {
-        let q_len = 5; // Forces the "leftover" while loop to run (4 + 1)
-        let d_len = 10;
-        let q = generate_data(q_len);
-        let d = generate_data(d_len);
-
-        let naive_score = naive_maxsim_dim128(&q, &d, q_len, d_len);
-        let simd_score = unsafe { simd::fused_dot_max_dim128_avx2(&q, &d, q_len, d_len) };
-        assert_approx_eq(simd_score, naive_score);
-    }
-
-    #[test]
-    fn test_simd_correctness_empty() {
-        let q: Vec<f32> = vec![];
-        let d: Vec<f32> = vec![];
-        let naive_score = naive_maxsim_dim128(&q, &d, 0, 0);
-        let simd_score = unsafe { simd::fused_dot_max_dim128_avx2(&q, &d, 0, 0) };
-        assert_eq!(simd_score, 0.0);
-        assert_eq!(naive_score, 0.0);
-    }
-
-    #[test]
-    fn test_fused_dot_max_arbitrary_dim() {
-        for dim in [1, 7, 8, 15, 16, 64, 130] {
-            let q_len = 5;
-            let d_len = 12;
-            let q: Vec<f32> = (0..q_len * dim)
-                .map(|i| ((i % 13) as f32 - 6.0) * 0.1)
-                .collect();
-            let d: Vec<f32> = (0..d_len * dim)
-                .map(|i| ((i % 11) as f32 - 5.0) * 0.1)
-                .collect();
-
-            let expected = reference_maxsim(&q, &d, q_len, d_len, dim);
-            let got = unsafe { simd::fused_dot_max_generic_avx2(&q, &d, q_len, d_len, dim) };
-            assert!(
-                (got - expected).abs() < 1e-4,
-                "dim: {}, got: {}, expected: {}",
-                dim,
-                got,
-                expected
-            );
-        }
     }
 }
