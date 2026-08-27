@@ -1,20 +1,20 @@
-torch>=2.0.0
-transformers>=4.40.0
-peft>=0.10.0
-safetensors>=0.4.0
+torch>=2.13.0
+transformers>=5.15.1
+peft>=0.20.0
+safetensors>=0.8.0
 
-pymupdf>=1.24.0
-Pillow>=10.0.0
-numpy>=1.24.0
+pymupdf>=1.28.2
+Pillow>=12.3.0
+numpy>=2.2.6
 
-fastapi>=0.100.0
-uvicorn>=0.20.0
-requests>=2.30.0
+fastapi>=0.141.1
+uvicorn>=0.52.4
+requests>=2.34.2
 
-rich>=13.0.0
-watchdog>=4.0.0
-PyYAML>=6.0
+rich>=15.0.0
+watchdog>=6.0.0
+PyYAML>=6.0.3
 
-maturin>=1.5.0
+maturin>=1.15.0
 
-pytest>=8.0.0
+pytest>=9.1.1
