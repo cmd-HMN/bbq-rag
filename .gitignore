@@ -58,3 +58,5 @@ retrieved_rank_*.png
 **.svg
 notebooks
 config.yaml
+
+perf**

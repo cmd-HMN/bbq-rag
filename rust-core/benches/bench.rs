@@ -1,12 +1,13 @@
-use criterion::{BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main};
-use maxsimd::cpu::vec256::simd::{fused_dot_max_dim128_avx2, fused_dot_max_generic_avx2};
+use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
+use std::hint::black_box;
+
 use maxsimd::blas::pro_sgl_doc_msgemm;
+use maxsimd::cpu::{fused_dot_max_dim128_avx2, fused_dot_max_generic_avx2};
 // Will change in future updates
 use maxsimd::blas::maxsim_variable_length;
-use maxsimd::quantization::quantize::qnt::{qf32_i8_d128, sq128x32_sq8};
+use maxsimd::quantization::{qf32_i8_d128, sq128x32_sq8, qf32_i8_d128_to_array};
 
-use pprof::criterion::{Output, PProfProfiler};
-use rand::{Rng, thread_rng};
+use rand::random_range;
 
 macro_rules! single_func_benchmark {
     (
@@ -20,11 +21,10 @@ macro_rules! single_func_benchmark {
         $(, $args:expr)*
     ) => {{
         $grp.throughput($thput);
-        let mut rng = rand::thread_rng();
         let q_data: Vec<f32> = (0..($q_len * $dim))
-            .map(|_| rng.gen_range(-1.0..1.0)).collect();
+            .map(|_| random_range(-1.0..1.0)).collect();
         let d_data: Vec<f32> = (0..($d_len * $dim))
-            .map(|_| rng.gen_range(-1.0..1.0)).collect();
+            .map(|_| random_range(-1.0..1.0)).collect();
         $grp.bench_function($name, |b| {
             b.iter(
                 || {
@@ -53,12 +53,11 @@ macro_rules! single_func_benchmark {
         $dim: expr
         $(, $args:expr)*
     ) => {{
-        let mut rng = rand::thread_rng();
         let q_data: Vec<f32> = (0..($q_len * $dim))
-            .map(|_| rng.gen_range(-1.0..1.0))
+            .map(|_| random_range(-1.0..1.0))
             .collect();
         let d_data: Vec<f32> = (0..($d_len * $dim))
-            .map(|_| rng.gen_range(-1.0..1.0))
+            .map(|_| random_range(-1.0..1.0))
             .collect();
 
         $grp.bench_function($name, |b| {
@@ -89,7 +88,7 @@ macro_rules! single_func_benchmark {
             b.iter(
                 || {
                     black_box($func(
-                        $(black_box($args)),* 
+                        $(black_box($args)),*
                     ))
                 },
             )
@@ -192,12 +191,11 @@ fn bench_cpu_level_2(c: &mut Criterion) {
         dim as u64 * q_len as u64 * d_len as u64,
     ));
 
-    let mut rng = rand::thread_rng();
     let q_data: Vec<f32> = (0..(q_len * dim))
-        .map(|_| rng.gen_range(-1.0..1.0))
+        .map(|_| random_range(-1.0..1.0))
         .collect();
     let d_data: Vec<f32> = (0..(d_len * dim))
-        .map(|_| rng.gen_range(-1.0..1.0))
+        .map(|_| random_range(-1.0..1.0))
         .collect();
 
     // [(doc_idx, doc_len, doc_data)]
@@ -222,15 +220,13 @@ fn bench_quant(c: &mut Criterion) {
 
     // keeping same dim as colbert
     const DIM: usize = 128;
-    let mut rng = thread_rng();
-
     // based on  dim
     let mut arr: [f32; DIM] = [0.0f32; DIM];
     //making array a little bit creepy
     for i in 0..DIM {
-        arr[i] = rng.gen_range(-1.0..1.0);
+        arr[i] = random_range(-1.0..1.0);
     }
-    
+
     let mut dst: [i8; DIM] = [0; DIM];
 
     // now benchmarking
@@ -252,13 +248,21 @@ fn bench_quant(c: &mut Criterion) {
         &mut dst
     );
 
+    single_func_benchmark!(
+        group,
+        throughput => Throughput::Elements(DIM as u64),
+        BenchmarkId::new("qf32_i8_d128_to_array", DIM),
+        qf32_i8_d128_to_array,
+        &arr
+    );
+
     group.finish();
 }
 
 criterion_group!(
     name=benches;
     // 100sec
-    config = Criterion::default().with_profiler(PProfProfiler::new(100, Output::Flamegraph(None)));
+    config = Criterion::default();
     targets = bench_cpu_level_1, bench_cpu_level_2, bench_quant
 );
 

@@ -1,13 +1,12 @@
 /// FOR CPU
 use maxsimd::cpu::{
-    fused_dot_max_dim128_avx2, fused_dot_max_generic_avx2, naive_maxsim_dim128, reference_maxsim,
-    max_avx2,
+    fused_dot_max_dim128_avx2, fused_dot_max_generic_avx2, max_avx2, naive_maxsim_dim128,
+    reference_maxsim,
 };
+use rand::random_range;
 
 fn generate_data(len: usize, dim: usize) -> Vec<f32> {
-    use rand::{Rng, thread_rng};
-    let mut rng = thread_rng();
-    (0..(len * dim)).map(|_| rng.gen_range(-1.0..1.0)).collect()
+    (0..(len * dim)).map(|_| random_range(-1.0..=1.0)).collect()
 }
 
 fn assert_approx_eq(a: f32, b: f32) {
@@ -113,7 +112,10 @@ fn test_max_avx2_slice_boundaries() {
 }
 
 fn test_max_avx2_nans_and_infinities() {
-    assert_eq!(max_avx2(&[f32::NEG_INFINITY, 1.0, f32::INFINITY]), f32::INFINITY);
+    assert_eq!(
+        max_avx2(&[f32::NEG_INFINITY, 1.0, f32::INFINITY]),
+        f32::INFINITY
+    );
     assert_eq!(max_avx2(&[f32::NEG_INFINITY; 50]), f32::NEG_INFINITY);
 
     let mixed = [f32::NAN, 1.0, 2.0];
@@ -121,7 +123,7 @@ fn test_max_avx2_nans_and_infinities() {
     assert_eq!(max_avx2(&mixed), expected);
 }
 
-fn test_max_avx2_all_nans(){
+fn test_max_avx2_all_nans() {
     assert!(max_avx2(&[f32::NAN; 128]).is_nan());
 }
 

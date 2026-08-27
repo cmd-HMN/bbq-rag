@@ -1,6 +1,7 @@
 pub mod blas;
 pub mod cpu;
 pub mod func;
+pub mod ops;
 pub mod quantization;
 
 use numpy::{PyReadonlyArray1, PyReadonlyArrayDyn, PyUntypedArrayMethods};
