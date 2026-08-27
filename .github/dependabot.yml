@@ -5,24 +5,32 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 5
     labels:
       - "dependencies"
       - "rust"
     commit-message:
       prefix: "chore(deps)"
+    groups:
+      rust-dependencies:
+        patterns:
+          - "*"
 
   # 2. Python Packages (pyproject.toml)
   - package-ecosystem: "pip"
     directory: "/"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 5
     labels:
       - "dependencies"
       - "python"
     commit-message:
       prefix: "chore(deps)"
+    groups:
+      python-dependencies:
+        patterns:
+          - "*"
 
   # 3. GitHub Actions CI Workflows
   - package-ecosystem: "github-actions"
@@ -35,3 +43,7 @@ updates:
       - "ci"
     commit-message:
       prefix: "ci(deps)"
+    groups:
+      actions-dependencies:
+        patterns:
+          - "*"
