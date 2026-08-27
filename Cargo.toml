@@ -43,6 +43,9 @@ jobs = 4
 name = "stub"
 path = "rust-core/_bin/stub.rs"
 
+# Adding explanation to this feature 
+# This is responsible for mkl backend for 2 thing in benchmarking and in testing
+# only use default it is enough, no need for this feature only added for mainly benchmarking
 [features]
 default = []
 dev = ["intel-mkl-src", "libc"]

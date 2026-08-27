@@ -35,7 +35,7 @@ jobs:
       # 5. Run Rust Cargo Tests (with dev features enabled for MKL/BLAS)
       - name: Run Cargo Tests
         run: |
-          cargo test --verbose --features dev
+          cargo test --verbose
 
       # 6. Install Python build tools and dependencies
       - name: Install Python dependencies
