@@ -208,7 +208,7 @@ fn maxsim_vrlen<'py>(
 
     //TODO
     //WIll change in the next commit
-    blas::maxsim_variable_length_slice(q_slice, d_slice, &doc_lengths, q_len, dim)
+    ops::maxsim_variable_length_slice(q_slice, d_slice, &doc_lengths, q_len, dim)
 }
 
 #[pymodule]
