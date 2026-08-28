@@ -28,7 +28,7 @@ use super::{csgemm};
 #[cfg(all(target_arch = "x86_64", feature = "dev"))]
 use super::{msgemm};
 
-pub mod function {
+pub mod bfunction {
     use crate::cpu::vec256::simd::max_avx2;
     use rayon::prelude::{IntoParallelIterator, ParallelIterator, IndexedParallelIterator};
     use std::cell::RefCell;
