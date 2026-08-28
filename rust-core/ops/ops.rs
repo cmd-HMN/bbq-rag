@@ -6,7 +6,6 @@ pub mod function {
     use pyo3::PyResult;
     use rayon::prelude::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 
-    #[inline(always)]
     pub fn omaxsim_variable_length_slice(
         q: &[f32],
         d_flat: &[f32],
@@ -26,7 +25,7 @@ pub mod function {
             curr_offset += doc_len * dim;
         }
 
-        if n_docs <= 64 {
+        if n_docs <= 4 {
             let mut results = Vec::with_capacity(n_docs);
             if dim == 128 {
                 for (offset, doc_len) in offsets {
@@ -46,7 +45,6 @@ pub mod function {
         } else if dim == 128 {
             offsets
                 .into_par_iter()
-                .with_min_len(64)
                 .map(|(offset, doc_len)| {
                     let doc_data = &d_flat[offset..offset + doc_len * 128];
                     unsafe { fused_dot_max_dim128_avx2(q, doc_data, q_len, doc_len) }
@@ -55,7 +53,6 @@ pub mod function {
         } else {
             offsets
                 .into_par_iter()
-                .with_min_len(64)
                 .map(|(offset, doc_len)| {
                     let doc_data = &d_flat[offset..offset + doc_len * dim];
                     unsafe { fused_dot_max_generic_avx2(q, doc_data, q_len, doc_len, dim) }
@@ -64,7 +61,6 @@ pub mod function {
         }
     }
 
-    #[inline(always)]
     pub fn omaxsim_variable_length(
         _q: Vec<f32>,                      // [q_len * dim]
         _d: Vec<(usize, usize, Vec<f32>)>, // [(doc_idx, doc_len, doc_data)]
@@ -90,7 +86,6 @@ pub mod function {
             .collect()
     }
 
-    #[inline(always)]
     pub fn omaxsim<'py>(
         q: PyReadonlyArrayDyn<'py, f32>,
         d: PyReadonlyArrayDyn<'py, f32>,
@@ -200,7 +195,6 @@ pub mod function {
         }
     }
 
-    #[inline(always)]
     pub unsafe fn omaxsim_ptr(
         q_ptr: usize,
         d_ptr: usize,
@@ -217,7 +211,6 @@ pub mod function {
         }
     }
 
-    #[inline(always)]
     pub unsafe fn omaxsim_3d_ptr(
         q_ptr: usize,
         d_ptr: usize,
@@ -261,7 +254,6 @@ pub mod function {
             .collect()
     }
 
-    #[inline(always)]
     pub fn omaxsim_vrlen<'py>(
         q: PyReadonlyArray1<'py, f32>,
         d: PyReadonlyArray1<'py, f32>,
