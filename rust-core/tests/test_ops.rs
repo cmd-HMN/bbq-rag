@@ -1,6 +1,6 @@
 ///! This file contains tests for the ops module
 
-use maxsimd::ops::{maxsim_variable_length, maxsim_variable_length_slice};
+use maxsimd::ops::{omaxsim_variable_length, omaxsim_variable_length_slice};
 
 fn generate_query(q_len: usize, dim: usize) -> Vec<f32> {
     vec![0.5; q_len * dim]
@@ -18,7 +18,7 @@ fn test_func_maxsimvariablelength_singleandpaddedbatches() {
     let d = vec![(0, 10, doc0), (1, 11, doc1), (2, 30, doc2)];
 
     // Run the function
-    let results = maxsim_variable_length(q.clone(), d, q_len, dim);
+    let results = omaxsim_variable_length(q.clone(), d, q_len, dim);
 
     assert_eq!(results.len(), 3);
 }
@@ -36,7 +36,7 @@ fn test_func_maxsimvariablelength_perfectmatchlargebatch() {
         d.push((i, doc_length, data));
     }
 
-    let results = maxsim_variable_length(q, d, q_len, dim);
+    let results = omaxsim_variable_length(q, d, q_len, dim);
 
     assert_eq!(results.len(), 35);
 }
@@ -61,7 +61,7 @@ fn test_func_maxsimvariablelength_fastpathglobalbatching() {
         d.push((i, len, data));
     }
 
-    let results = maxsim_variable_length(q, d, q_len, dim);
+    let results = omaxsim_variable_length(q, d, q_len, dim);
 
     assert_eq!(results.len(), 55);
 }
@@ -72,7 +72,7 @@ fn test_func_maxsimvariablelength_emptydocumentlist() {
     let q = generate_query(q_len, dim);
     let d: Vec<(usize, usize, Vec<f32>)> = vec![];
 
-    let results = maxsim_variable_length(q, d, q_len, dim);
+    let results = omaxsim_variable_length(q, d, q_len, dim);
 
     assert_eq!(results.len(), 0);
 }

@@ -1,6 +1,10 @@
 pub mod ops;
 
 pub use ops::function::{
-    maxsim_variable_length,
-    maxsim_variable_length_slice,
+    omaxsim_variable_length,
+    omaxsim_variable_length_slice,
+    omaxsim_ptr,
+    omaxsim_3d_ptr,
+    omaxsim_vrlen,
+    omaxsim
 };
