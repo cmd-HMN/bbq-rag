@@ -91,9 +91,9 @@ pub mod function {
 
     pub fn pro_sgl_doc(_q: &[f32], _d: &[f32], _q_len: usize, _d_len: usize, _dim: usize) -> f32 {
         if _dim == 128 {
-            unsafe { crate::cpu::vec256::simd::fused_dot_max_dim128_avx2(_q, _d, _q_len, _d_len) }
+            unsafe { crate::cpu::vec256::simd::fused_dot_max_dim128_avx2_f32(_q, _d, _q_len, _d_len) }
         } else {
-            unsafe { crate::cpu::vec256::simd::fused_dot_max_generic_avx2(_q, _d, _q_len, _d_len, _dim) }
+            unsafe { crate::cpu::vec256::simd::fused_dot_max_generic_avx2_f32(_q, _d, _q_len, _d_len, _dim) }
         }
     }
 

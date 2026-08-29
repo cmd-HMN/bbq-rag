@@ -220,7 +220,7 @@ pub mod simd {
     /// The fused dot-product and max reduction for 128-dimensional vectors.
     #[target_feature(enable = "avx2", enable = "fma")]
     #[inline]
-    pub unsafe fn fused_dot_max_dim128_avx2(
+    pub unsafe fn fused_dot_max_dim128_avx2_f32(
         q: &[f32],
         d: &[f32],
         q_len: usize,
@@ -296,7 +296,7 @@ pub mod simd {
     //style typ shit so this is the best I can do
     #[target_feature(enable = "avx2", enable = "fma")]
     #[inline]
-    pub unsafe fn fused_dot_max_generic_avx2(
+    pub unsafe fn fused_dot_max_generic_avx2_f32(
         q: &[f32],
         d: &[f32],
         q_len: usize,
@@ -357,6 +357,17 @@ pub mod simd {
             total += s;
         }
         total
+    }
+
+    pub unsafe fn fused_dot_max_generic_avx2_i8(
+        q: &[i8],
+        d: &[i8],
+        q_scale: &[f32],
+        d_scale: &[f32],
+        q_len: usize,
+        d_len: usize
+    ) {
+
     }
 
     pub fn naive_maxsim_dim128(q: &[f32], d: &[f32], q_len: usize, d_len: usize) -> f32 {

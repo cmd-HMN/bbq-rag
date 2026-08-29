@@ -1,6 +1,10 @@
 use criterion::{BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main};
 use maxsimd::cpu::vec256::simd::{fused_dot_max_dim128_avx2, fused_dot_max_generic_avx2};
 use maxsimd::blas::pro_sgl_doc_msgemm;
+<<<<<<< Updated upstream
+=======
+use maxsimd::cpu::{fused_dot_max_dim128_avx2_f32, fused_dot_max_generic_avx2_f32};
+>>>>>>> Stashed changes
 // Will change in future updates
 use maxsimd::blas::maxsim_variable_length;
 use maxsimd::quantization::quantize::qnt::{qf32_i8_d128, sq128x32_sq8};
@@ -117,7 +121,7 @@ fn bench_cpu_level_1(c: &mut Criterion) {
                 group,
                 throughput => Throughput::Elements(dim as u64 * q_len as u64 * d_len as u64),
                 BenchmarkId::new("fused_dot_max_dim128_avx2", d_len),
-                fused_dot_max_dim128_avx2,
+                fused_dot_max_dim128_avx2_f32,
                 q_len,
                 d_len,
                 dim
@@ -153,7 +157,7 @@ fn bench_cpu_level_1(c: &mut Criterion) {
                 d_group,
                 throughput => Throughput::Elements(dim as u64 * q_len as u64 * d_len as u64),
                 BenchmarkId::new("fused_dot_max_generic_avx2", dim),
-                fused_dot_max_generic_avx2,
+                fused_dot_max_generic_avx2_f32,
                 q_len,
                 d_len,
                 dim,

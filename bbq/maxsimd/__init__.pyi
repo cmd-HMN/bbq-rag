@@ -51,4 +51,4 @@ def maxsim_vrlen(
     dim: builtins.int,
 ) -> builtins.list[builtins.float]: ...
 
-__version__ = "0.1.0-alpha"
+__version__ = "0.1.1-alpha"
