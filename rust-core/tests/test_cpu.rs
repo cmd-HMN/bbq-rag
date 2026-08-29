@@ -1,18 +1,12 @@
 /// FOR CPU
 use maxsimd::cpu::{
-<<<<<<< Updated upstream
-    fused_dot_max_dim128_avx2, fused_dot_max_generic_avx2, naive_maxsim_dim128, reference_maxsim,
-    max_avx2,
-=======
-    fused_dot_max_dim128_avx2_f32, fused_dot_max_generic_avx2_f32, max_avx2, naive_maxsim_dim128,
+    fused_dot_max_dim128_avx2_f32 as fused_dot_max_dim128_avx2, fused_dot_max_generic_avx2_f32 as fused_dot_max_generic_avx2, max_avx2, naive_maxsim_dim128,
     reference_maxsim,
->>>>>>> Stashed changes
 };
+use rand::random_range;
 
 fn generate_data(len: usize, dim: usize) -> Vec<f32> {
-    use rand::{Rng, thread_rng};
-    let mut rng = thread_rng();
-    (0..(len * dim)).map(|_| rng.gen_range(-1.0..1.0)).collect()
+    (0..(len * dim)).map(|_| random_range(-1.0..=1.0)).collect()
 }
 
 fn assert_approx_eq(a: f32, b: f32) {
@@ -37,8 +31,8 @@ fn test_fused_dot_max_dim128_correctnes() {
 
     let expected = reference_maxsim(&q, &d, q_len, d_len, dim);
 
-    let got_128 = unsafe { fused_dot_max_dim128_avx2_f32(&q, &d, q_len, d_len) };
-    let got_generic = unsafe { fused_dot_max_generic_avx2_f32(&q, &d, q_len, d_len, dim) };
+    let got_128 = unsafe { fused_dot_max_dim128_avx2(&q, &d, q_len, d_len) };
+    let got_generic = unsafe { fused_dot_max_generic_avx2(&q, &d, q_len, d_len, dim) };
 
     assert!(
         (got_128 - expected).abs() < 1e-4,
@@ -61,7 +55,7 @@ fn test_simd_correctness_standard_batch() {
     let d = generate_data(d_len, 128);
 
     let naive_score = naive_maxsim_dim128(&q, &d, q_len, d_len);
-    let simd_score = unsafe { fused_dot_max_dim128_avx2_f32(&q, &d, q_len, d_len) };
+    let simd_score = unsafe { fused_dot_max_dim128_avx2(&q, &d, q_len, d_len) };
     assert_approx_eq(simd_score, naive_score);
 }
 
@@ -72,7 +66,7 @@ fn test_simd_correctness_leftovers() {
     let d = generate_data(d_len, 128);
 
     let naive_score = naive_maxsim_dim128(&q, &d, q_len, d_len);
-    let simd_score = unsafe { fused_dot_max_dim128_avx2_f32(&q, &d, q_len, d_len) };
+    let simd_score = unsafe { fused_dot_max_dim128_avx2(&q, &d, q_len, d_len) };
     assert_approx_eq(simd_score, naive_score);
 }
 
@@ -80,7 +74,7 @@ fn test_simd_correctness_empty() {
     let q: Vec<f32> = vec![];
     let d: Vec<f32> = vec![];
     let naive_score = naive_maxsim_dim128(&q, &d, 0, 0);
-    let simd_score = unsafe { fused_dot_max_dim128_avx2_f32(&q, &d, 0, 0) };
+    let simd_score = unsafe { fused_dot_max_dim128_avx2(&q, &d, 0, 0) };
     assert_eq!(simd_score, 0.0);
     assert_eq!(naive_score, 0.0);
 }
@@ -97,7 +91,7 @@ fn test_fused_dot_max_arbitrary_dim() {
             .collect();
 
         let expected = reference_maxsim(&q, &d, q_len, d_len, dim);
-        let got = unsafe { fused_dot_max_generic_avx2_f32(&q, &d, q_len, d_len, dim) };
+        let got = unsafe { fused_dot_max_generic_avx2(&q, &d, q_len, d_len, dim) };
         assert!(
             (got - expected).abs() < 1e-4,
             "dim: {}, got: {}, expected: {}",
@@ -118,7 +112,10 @@ fn test_max_avx2_slice_boundaries() {
 }
 
 fn test_max_avx2_nans_and_infinities() {
-    assert_eq!(max_avx2(&[f32::NEG_INFINITY, 1.0, f32::INFINITY]), f32::INFINITY);
+    assert_eq!(
+        max_avx2(&[f32::NEG_INFINITY, 1.0, f32::INFINITY]),
+        f32::INFINITY
+    );
     assert_eq!(max_avx2(&[f32::NEG_INFINITY; 50]), f32::NEG_INFINITY);
 
     let mixed = [f32::NAN, 1.0, 2.0];
@@ -126,7 +123,7 @@ fn test_max_avx2_nans_and_infinities() {
     assert_eq!(max_avx2(&mixed), expected);
 }
 
-fn test_max_avx2_all_nans(){
+fn test_max_avx2_all_nans() {
     assert!(max_avx2(&[f32::NAN; 128]).is_nan());
 }
 

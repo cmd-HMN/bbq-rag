@@ -42,11 +42,13 @@ from rich.panel import Panel
 def maxsimd_vrlen(
     q_flat: np.ndarray,
     d_flat: np.ndarray,
-    doc_lengths: List[int],
+    doc_lengths: Any,
     q_len: int,
     dim: int,
 ) -> List[float]:
     """Custom maxsimd Rust extension implementation (flat buffer + Rayon)."""
+    if isinstance(doc_lengths, list):
+        doc_lengths = np.asarray(doc_lengths, dtype=np.uint64)
     return maxsimd.maxsim_vrlen(q_flat, d_flat, doc_lengths, q_len, dim)
 
 
@@ -380,21 +382,41 @@ def run_variable_length_benchmark(console: Console, doc_counts: List[int]) -> Di
 
         tp_vrlen = num_docs / (m_vrlen / 1000.0)
 
+        implementations = [
+            ("maxsimd.maxsim_vrlen (Flat + Rayon)", m_vrlen),
+            ("maxsimd.maxsim_ptr (Torch Pointer Loop)", m_ptr),
+            ("maxsim-cpu (PyPI)", m_cpu),
+            ("PyTorch (Loop)", m_torch_loop),
+            ("PyTorch (Batched + Masked)", m_torch_batch),
+            ("NumPy (Reference)", m_numpy),
+        ]
+        fastest_name, fastest_ms = min(implementations, key=lambda x: x[1])
+        speedup_vs_baseline = m_torch_loop / fastest_ms if fastest_ms > 0 else 1.0
+
         table = Table(title=f"Variable-Length Results: {num_docs} Documents")
         table.add_column("Implementation", style="cyan")
         table.add_column("Latency (ms)", justify="right")
         table.add_column("Speedup vs PyTorch Loop", justify="right", style="green")
         table.add_column("Speedup vs NumPy", justify="right", style="green")
 
-        table.add_row("1. maxsimd.maxsim_vrlen (Flat + Rayon)", f"{m_vrlen:.3f} ms", speedup_str(m_torch_loop, m_vrlen), speedup_str(m_numpy, m_vrlen))
-        table.add_row("2. maxsimd.maxsim_ptr (Torch Pointer Loop)", f"{m_ptr:.3f} ms", speedup_str(m_torch_loop, m_ptr), speedup_str(m_numpy, m_ptr))
-        table.add_row("3. maxsim-cpu (PyPI)", f"{m_cpu:.3f} ms", speedup_str(m_torch_loop, m_cpu), speedup_str(m_numpy, m_cpu))
-        table.add_row("4. PyTorch (Loop)", f"{m_torch_loop:.3f} ms", "1.00x (Baseline)", speedup_str(m_numpy, m_torch_loop))
-        table.add_row("5. PyTorch (Batched + Masked)", f"{m_torch_batch:.3f} ms", speedup_str(m_torch_loop, m_torch_batch), speedup_str(m_numpy, m_torch_batch))
-        table.add_row("6. NumPy (Reference)", f"{m_numpy:.3f} ms", speedup_str(m_torch_loop, m_numpy), "1.00x (Baseline)")
+        for idx, (name, latency) in enumerate(implementations, 1):
+            is_winner = (name == fastest_name)
+            name_str = f"[bold yellow]{name} (Winner)[/bold yellow]" if is_winner else f"{idx}. {name}"
+            lat_str = f"[bold green]{latency:.3f} ms[/bold green]" if is_winner else f"{latency:.3f} ms"
+            sp_torch = speedup_str(m_torch_loop, latency)
+            sp_numpy = speedup_str(m_numpy, latency)
+            if is_winner:
+                sp_torch = f"[bold green]{sp_torch}[/bold green]"
+                sp_numpy = f"[bold green]{sp_numpy}[/bold green]"
+            table.add_row(name_str, lat_str, sp_torch, sp_numpy)
 
         console.print(table)
-        console.print(f"[bold]Throughput (maxsim_vrlen):[/bold] {tp_vrlen:.1f} docs/sec | [bold]Correctness:[/bold] [green]{'PASS' if valid else 'FAIL'}[/green]\n")
+        status_text = "[green]PASS[/green]" if valid else "[red]FAIL[/red]"
+        console.print(
+            f"[bold yellow]Winner:[/bold yellow] [bold cyan]{fastest_name}[/bold cyan] ({fastest_ms:.3f} ms, [bold green]{speedup_vs_baseline:.2f}x[/bold green] vs PyTorch) | "
+            f"[bold]Throughput (maxsim_vrlen):[/bold] [bold magenta]{tp_vrlen:,.1f}[/bold magenta] docs/sec | "
+            f"[bold]Correctness:[/bold] {status_text}\n"
+        )
 
     return results
 
@@ -485,22 +507,42 @@ def run_uniform_3d_benchmark(console: Console, doc_counts: List[int]) -> Dict[st
 
         tp_3d_ptr = num_docs / (m_3d_ptr / 1000.0)
 
+        implementations = [
+            ("maxsimd.maxsim_3d_ptr (Torch Pointer + Rayon)", m_3d_ptr),
+            ("maxsimd.maxsim (NumPy 3D + Rayon)", m_3d_numpy),
+            ("maxsimd.maxsim_vrlen (Flat + Rayon)", m_vrlen),
+            ("maxsim-cpu (PyPI maxsim_scores)", m_cpu),
+            ("PyTorch (Dense 3D einsum)", m_torch_einsum),
+            ("PyTorch (Loop)", m_torch_loop),
+            ("NumPy (Reference)", m_numpy),
+        ]
+        fastest_name, fastest_ms = min(implementations, key=lambda x: x[1])
+        speedup_vs_baseline = m_torch_loop / fastest_ms if fastest_ms > 0 else 1.0
+
         table = Table(title=f"Uniform 3D Results: {num_docs} Documents")
         table.add_column("Implementation", style="cyan")
         table.add_column("Latency (ms)", justify="right")
         table.add_column("Speedup vs PyTorch Loop", justify="right", style="green")
         table.add_column("Speedup vs NumPy", justify="right", style="green")
 
-        table.add_row("1. maxsimd.maxsim_3d_ptr (Torch Pointer + Rayon)", f"{m_3d_ptr:.3f} ms", speedup_str(m_torch_loop, m_3d_ptr), speedup_str(m_numpy, m_3d_ptr))
-        table.add_row("2. maxsimd.maxsim (NumPy 3D + Rayon)", f"{m_3d_numpy:.3f} ms", speedup_str(m_torch_loop, m_3d_numpy), speedup_str(m_numpy, m_3d_numpy))
-        table.add_row("3. maxsimd.maxsim_vrlen (Flat + Rayon)", f"{m_vrlen:.3f} ms", speedup_str(m_torch_loop, m_vrlen), speedup_str(m_numpy, m_vrlen))
-        table.add_row("4. maxsim-cpu (PyPI maxsim_scores)", f"{m_cpu:.3f} ms", speedup_str(m_torch_loop, m_cpu), speedup_str(m_numpy, m_cpu))
-        table.add_row("5. PyTorch (Dense 3D einsum)", f"{m_torch_einsum:.3f} ms", speedup_str(m_torch_loop, m_torch_einsum), speedup_str(m_numpy, m_torch_einsum))
-        table.add_row("6. PyTorch (Loop)", f"{m_torch_loop:.3f} ms", "1.00x (Baseline)", speedup_str(m_numpy, m_torch_loop))
-        table.add_row("7. NumPy (Reference)", f"{m_numpy:.3f} ms", speedup_str(m_torch_loop, m_numpy), "1.00x (Baseline)")
+        for idx, (name, latency) in enumerate(implementations, 1):
+            is_winner = (name == fastest_name)
+            name_str = f"[bold yellow]{name} (Winner)[/bold yellow]" if is_winner else f"{idx}. {name}"
+            lat_str = f"[bold green]{latency:.3f} ms[/bold green]" if is_winner else f"{latency:.3f} ms"
+            sp_torch = speedup_str(m_torch_loop, latency)
+            sp_numpy = speedup_str(m_numpy, latency)
+            if is_winner:
+                sp_torch = f"[bold green]{sp_torch}[/bold green]"
+                sp_numpy = f"[bold green]{sp_numpy}[/bold green]"
+            table.add_row(name_str, lat_str, sp_torch, sp_numpy)
 
         console.print(table)
-        console.print(f"[bold]Throughput (maxsim_3d_ptr):[/bold] {tp_3d_ptr:.1f} docs/sec | [bold]Correctness:[/bold] [green]{'PASS' if valid else 'FAIL'}[/green]\n")
+        status_text = "[green]PASS[/green]" if valid else "[red]FAIL[/red]"
+        console.print(
+            f"[bold yellow]Winner:[/bold yellow] [bold cyan]{fastest_name}[/bold cyan] ({fastest_ms:.3f} ms, [bold green]{speedup_vs_baseline:.2f}x[/bold green] vs PyTorch) | "
+            f"[bold]Throughput (maxsim_3d_ptr):[/bold] [bold magenta]{tp_3d_ptr:,.1f}[/bold magenta] docs/sec | "
+            f"[bold]Correctness:[/bold] {status_text}\n"
+        )
 
     return results
 
@@ -597,7 +639,7 @@ def main():
         expand=False,
     ))
 
-    doc_counts = [20, 50, 100, 250, 500, 1000, 2000]
+    doc_counts = [20, 50, 100, 250, 500, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000]
 
     var_results = run_variable_length_benchmark(console, doc_counts)
     uniform_results = run_uniform_3d_benchmark(console, doc_counts)

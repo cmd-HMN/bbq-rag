@@ -96,6 +96,7 @@ fn qf32_to_qi8_d128(src: &[f32; QParmas::BLOCK], dst: &mut QI8) {
 pub mod qnt {
     use super::{QBlock, QData, QI8, QParmas, QTYPE, qf32_to_qi8_d128};
 
+    #[inline(always)]
     pub fn qf32_i8_d128(src: &[f32]) -> QBlock {
         let mut blocks = [QI8 {
             scale: 0.0,
@@ -140,8 +141,8 @@ pub mod qnt {
             // round vs round_ties_even
             // round change like 29.5 t0 30 but round_ties_even changes to 29 and its matches our
             // simd implemeation
-            // FIX: during the build failure 
-            // thread 'quantization::quantize::tests::test_qf32_to_qi8_d128_rad' (6782) 
+            // FIX: during the build failure
+            // thread 'quantization::quantize::tests::test_qf32_to_qi8_d128_rad' (6782)
             // panicked at rust-core/quantization/quantize.rs:207:13:
             // assertion `left == right` failed: Destination Mismatch 49 48
             // left: 49 round was changing this to 49 instead of 48
@@ -158,5 +159,10 @@ pub mod qnt {
             sq32_to_sq8(chunk, &mut block_dst, &mut scale);
             dst[b * 32..(b + 1) * 32].copy_from_slice(&block_dst);
         }
+    }
+
+    #[inline(always)]
+    pub fn qf32_i8_d128_to_array(src: &[f32; QParmas::BASE_DIMS]) -> [i8; QParmas::BASE_DIMS] {
+            qf32_i8_d128(src).to_array().unwrap()
     }
 }

@@ -31,10 +31,9 @@ libc = {version = "0.2", optional = true}
 # optional = true
 
 [dev-dependencies]
-criterion = "0.5"
+criterion = "0.8.2"
 approx = "0.5"
-rand = "0.8"
-pprof = { version = "0.15.0", features = ["flamegraph", "criterion"] }
+rand = "0.10.2"
 
 [build]
 jobs = 4
@@ -51,7 +50,7 @@ default = []
 dev = ["intel-mkl-src", "libc"]
 
 [profile.bench]
-debug = false
+debug = true
 
 [[bench]]
 name = "bench"
