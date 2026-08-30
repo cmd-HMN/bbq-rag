@@ -1,7 +1,7 @@
 // /! All maxsim variants used in this project
 
 pub mod function {
-    use crate::cpu::{fused_dot_max_dim128_avx2_f32 as fused_dot_max_dim128_avx2, fused_dot_max_generic_avx2_f32 as fused_dot_max_generic_avx2};
+    use crate::cpu::{dotmax128_f32avx2 as fused_dot_max_dim128_avx2, dotmaxg_f32avx2 as fused_dot_max_generic_avx2};
     use numpy::{PyReadonlyArray1, PyReadonlyArrayDyn, PyUntypedArrayMethods};
     use pyo3::PyResult;
     use rayon::prelude::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};

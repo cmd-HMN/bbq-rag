@@ -2,7 +2,7 @@ use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_m
 use std::hint::black_box;
 
 use maxsimd::blas::pro_sgl_doc_msgemm;
-use maxsimd::cpu::{fused_dot_max_dim128_avx2_f32 as fused_dot_max_dim128_avx2, fused_dot_max_generic_avx2_f32 as fused_dot_max_generic_avx2};
+use maxsimd::cpu::{dotmax128_f32avx2 as fused_dot_max_dim128_avx2, dotmaxg_f32avx2 as fused_dot_max_generic_avx2};
 // Will change in future updates
 use maxsimd::ops::omaxsim_variable_length;
 use maxsimd::quantization::{qf32_i8_d128, sq128x32_sq8, qf32_i8_d128_to_array};

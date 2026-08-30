@@ -108,12 +108,7 @@ pub mod simd {
     }
 
     #[inline(always)]
-    fn hs_4x(
-        a0: __m256,
-        a1: __m256,
-        a2: __m256,
-        a3: __m256
-    ) -> (f32, f32, f32, f32) {
+    fn hs_4x(a0: __m256, a1: __m256, a2: __m256, a3: __m256) -> (f32, f32, f32, f32) {
         unsafe {
             let l0 = _mm256_castps256_ps128(a0);
             let h0 = _mm256_extractf128_ps(a0, 1);
@@ -142,7 +137,7 @@ pub mod simd {
         }
     }
 
-    //TODO 
+    //TODO
     //Change the desing from AoS to SoA
     //Furhter more cache tiling
     /// Kernel for fused_dot_max_dim128_avx2
@@ -157,53 +152,51 @@ pub mod simd {
     ///
     /// Tried using the kernel without max, the performace regressed so added support with max
     macro_rules! kernel_4x2_dim128_with_max_handling {
-        ($q0:ident, $q1:ident, $q2:ident, $q3:ident, $doc:ident, $m0:ident, $m1:ident, $m2:ident, $m3:ident) => {{
-            let mut acc0_a = _mm256_setzero_ps();
-            let mut acc0_b = _mm256_setzero_ps();
-            let mut acc1_a = _mm256_setzero_ps();
-            let mut acc1_b = _mm256_setzero_ps();
-            let mut acc2_a = _mm256_setzero_ps();
-            let mut acc2_b = _mm256_setzero_ps();
-            let mut acc3_a = _mm256_setzero_ps();
-            let mut acc3_b = _mm256_setzero_ps();
+        ($q0:ident, $q1:ident, $q2:ident, $q3:ident, $d0:ident, $d1:ident, $m0:ident, $m1:ident, $m2:ident, $m3:ident) => {{
+            
+            let mut acc00 = _mm256_setzero_ps();
+            let mut acc01 = _mm256_setzero_ps();
 
-            for k in 0..8 {
-                let va = _mm256_loadu_ps($doc.add(k * 16));
-                let vb = _mm256_loadu_ps($doc.add((k * 16) + 8));
+            let mut acc10 = _mm256_setzero_ps();
+            let mut acc11 = _mm256_setzero_ps();
 
-                acc0_a = _mm256_fmadd_ps(va, _mm256_loadu_ps($q0.add(k * 16)), acc0_a);
-                acc0_b = _mm256_fmadd_ps(vb, _mm256_loadu_ps($q0.add((k * 16) + 8)), acc0_b);
+            let mut acc20 = _mm256_setzero_ps();
+            let mut acc21 = _mm256_setzero_ps();
 
-                acc1_a = _mm256_fmadd_ps(va, _mm256_loadu_ps($q1.add(k * 16)), acc1_a);
-                acc1_b = _mm256_fmadd_ps(vb, _mm256_loadu_ps($q1.add((k * 16) + 8)), acc1_b);
+            let mut acc30 = _mm256_setzero_ps();
+            let mut acc31 = _mm256_setzero_ps();
+            
+            for k in 0..16 {
+                let offset = k * 8;
 
-                acc2_a = _mm256_fmadd_ps(va, _mm256_loadu_ps($q2.add(k * 16)), acc2_a);
-                acc2_b = _mm256_fmadd_ps(vb, _mm256_loadu_ps($q2.add((k * 16) + 8)), acc2_b);
+                let vd0 = _mm256_loadu_ps($d0.add(offset)); 
+                let vd1 = _mm256_loadu_ps($d1.add(offset));
 
-                acc3_a = _mm256_fmadd_ps(va, _mm256_loadu_ps($q3.add(k * 16)), acc3_a);
-                acc3_b = _mm256_fmadd_ps(vb, _mm256_loadu_ps($q3.add((k * 16) + 8)), acc3_b);
+                // query
+                let vq0 = _mm256_loadu_ps($q0.add(offset));
+                let vq1 = _mm256_loadu_ps($q1.add(offset));
+                let vq2 = _mm256_loadu_ps($q2.add(offset));
+                let vq3 = _mm256_loadu_ps($q3.add(offset));
+
+                acc00 = _mm256_fmadd_ps(vd0, vq0, acc00);
+                acc01 = _mm256_fmadd_ps(vd1, vq0, acc01);
+
+                acc10 = _mm256_fmadd_ps(vd0, vq1, acc10);
+                acc11 = _mm256_fmadd_ps(vd1, vq1, acc11);
+
+                acc20 = _mm256_fmadd_ps(vd0, vq2, acc20);
+                acc21 = _mm256_fmadd_ps(vd1, vq2, acc21);
+
+                acc30 = _mm256_fmadd_ps(vd0, vq3, acc30);
+                acc31 = _mm256_fmadd_ps(vd1, vq3, acc31);
             }
 
-            let a0 = _mm256_add_ps(acc0_a, acc0_b);
-            let a1 = _mm256_add_ps(acc1_a, acc1_b);
-            let a2 = _mm256_add_ps(acc2_a, acc2_b);
-            let a3 = _mm256_add_ps(acc3_a, acc3_b);
 
-            let (d0, d1, d2, d3) = hs_4x(a0, a1, a2, a3);
-
-            if d0 > $m0 {
-                $m0 = d0;
-            }
-            if d1 > $m1 {
-                $m1 = d1;
-            }
-            if d2 > $m2 {
-                $m2 = d2;
-            }
-            if d3 > $m3 {
-                $m3 = d3;
-            }
-            }};
+            $m0 = $m0.max(horizontal_sum(acc00)).max(horizontal_sum(acc01));
+            $m1 = $m1.max(horizontal_sum(acc10)).max(horizontal_sum(acc11));
+            $m2 = $m2.max(horizontal_sum(acc20)).max(horizontal_sum(acc21));
+            $m3 = $m3.max(horizontal_sum(acc30)).max(horizontal_sum(acc31));
+        }};
     }
 
     /// Colbert Style fused dot-product and max reduction for 128-dimensional vectors.
@@ -220,12 +213,7 @@ pub mod simd {
     /// The fused dot-product and max reduction for 128-dimensional vectors.
     #[target_feature(enable = "avx2", enable = "fma")]
     #[inline]
-    pub unsafe fn fused_dot_max_dim128_avx2_f32(
-        q: &[f32],
-        d: &[f32],
-        q_len: usize,
-        d_len: usize,
-    ) -> f32 {
+    pub unsafe fn dotmax128_f32avx2(q: &[f32], d: &[f32], q_len: usize, d_len: usize) -> f32 {
         // have done some tested and based on those choosing 4 * 2(more info in next commit)
 
         if q_len == 0 || d_len == 0 {
@@ -251,11 +239,10 @@ pub mod simd {
                 let mut m3 = f32::NEG_INFINITY;
 
                 for di in 0..d_len {
-                    let curr_d_ptr = d_ptr.add(di * 128);
+                    let d0 = d_ptr.add((di * 0) + 128);
+                    let d1 = d_ptr.add((di * 1) + 128);
 
-                    kernel_4x2_dim128_with_max_handling!(
-                        q0, q1, q2, q3, curr_d_ptr, m0, m1, m2, m3
-                    );
+                    kernel_4x2_dim128_with_max_handling!(q0, q1, q2, q3, d0, d1, m0, m1, m2, m3);
                 }
 
                 total_score += m0 + m1 + m2 + m3;
@@ -291,12 +278,18 @@ pub mod simd {
         total_score
     }
 
+    /// Dot Max function with tiled
+    /// For less than 500 docs leave no space 
+    pub unsafe fn dotmaxt128_f32avx2(q: &[f32], d: &[f32], q_len: usize, d_len: usize) -> f32 {
+        0.0
+    }
+
     //TODO
     //This isn't optimzied at all, and haven't planning on doing so as the aim is make a colbert
     //style typ shit so this is the best I can do
     #[target_feature(enable = "avx2", enable = "fma")]
     #[inline]
-    pub unsafe fn fused_dot_max_generic_avx2_f32(
+    pub unsafe fn dotmaxg_f32avx2(
         q: &[f32],
         d: &[f32],
         q_len: usize,
@@ -359,18 +352,17 @@ pub mod simd {
         total
     }
 
-    pub unsafe fn fused_dot_max_generic_avx2_i8(
+    pub unsafe fn dotmaxg_i8avx2(
         q: &[i8],
         d: &[i8],
         q_scale: &[f32],
         d_scale: &[f32],
         q_len: usize,
-        d_len: usize
+        d_len: usize,
     ) {
-
     }
 
-    pub fn naive_maxsim_dim128(q: &[f32], d: &[f32], q_len: usize, d_len: usize) -> f32 {
+    pub fn ref_maxsimd128(q: &[f32], d: &[f32], q_len: usize, d_len: usize) -> f32 {
         if q_len == 0 || d_len == 0 {
             return 0.0;
         }
@@ -393,7 +385,7 @@ pub mod simd {
         total_score
     }
 
-    pub fn reference_maxsim(q: &[f32], d: &[f32], q_len: usize, d_len: usize, dim: usize) -> f32 {
+    pub fn ref_maxsim(q: &[f32], d: &[f32], q_len: usize, d_len: usize, dim: usize) -> f32 {
         let mut total = 0.0f32;
         for qi in 0..q_len {
             let mut max_dot = f32::NEG_INFINITY;

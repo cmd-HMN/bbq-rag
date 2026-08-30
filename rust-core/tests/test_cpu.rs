@@ -1,7 +1,7 @@
 /// FOR CPU
 use maxsimd::cpu::{
-    fused_dot_max_dim128_avx2_f32 as fused_dot_max_dim128_avx2, fused_dot_max_generic_avx2_f32 as fused_dot_max_generic_avx2, max_avx2, naive_maxsim_dim128,
-    reference_maxsim,
+    dotmax128_f32avx2 as fused_dot_max_dim128_avx2, dotmaxg_f32avx2 as fused_dot_max_generic_avx2, max_avx2, ref_maxsimd128,
+    ref_maxsim,
 };
 use rand::random_range;
 
@@ -29,7 +29,7 @@ fn test_fused_dot_max_dim128_correctnes() {
         .map(|i| ((i % 19) as f32 - 9.0) * 0.1)
         .collect();
 
-    let expected = reference_maxsim(&q, &d, q_len, d_len, dim);
+    let expected = ref_maxsim(&q, &d, q_len, d_len, dim);
 
     let got_128 = unsafe { fused_dot_max_dim128_avx2(&q, &d, q_len, d_len) };
     let got_generic = unsafe { fused_dot_max_generic_avx2(&q, &d, q_len, d_len, dim) };
@@ -54,7 +54,7 @@ fn test_simd_correctness_standard_batch() {
     let q = generate_data(q_len, 128);
     let d = generate_data(d_len, 128);
 
-    let naive_score = naive_maxsim_dim128(&q, &d, q_len, d_len);
+    let naive_score = ref_maxsimd128(&q, &d, q_len, d_len);
     let simd_score = unsafe { fused_dot_max_dim128_avx2(&q, &d, q_len, d_len) };
     assert_approx_eq(simd_score, naive_score);
 }
@@ -65,7 +65,7 @@ fn test_simd_correctness_leftovers() {
     let q = generate_data(q_len, 128);
     let d = generate_data(d_len, 128);
 
-    let naive_score = naive_maxsim_dim128(&q, &d, q_len, d_len);
+    let naive_score = ref_maxsimd128(&q, &d, q_len, d_len);
     let simd_score = unsafe { fused_dot_max_dim128_avx2(&q, &d, q_len, d_len) };
     assert_approx_eq(simd_score, naive_score);
 }
@@ -73,7 +73,7 @@ fn test_simd_correctness_leftovers() {
 fn test_simd_correctness_empty() {
     let q: Vec<f32> = vec![];
     let d: Vec<f32> = vec![];
-    let naive_score = naive_maxsim_dim128(&q, &d, 0, 0);
+    let naive_score = ref_maxsimd128(&q, &d, 0, 0);
     let simd_score = unsafe { fused_dot_max_dim128_avx2(&q, &d, 0, 0) };
     assert_eq!(simd_score, 0.0);
     assert_eq!(naive_score, 0.0);
@@ -90,7 +90,7 @@ fn test_fused_dot_max_arbitrary_dim() {
             .map(|i| ((i % 11) as f32 - 5.0) * 0.1)
             .collect();
 
-        let expected = reference_maxsim(&q, &d, q_len, d_len, dim);
+        let expected = ref_maxsim(&q, &d, q_len, d_len, dim);
         let got = unsafe { fused_dot_max_generic_avx2(&q, &d, q_len, d_len, dim) };
         assert!(
             (got - expected).abs() < 1e-4,
