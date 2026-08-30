@@ -1,4 +1,6 @@
+#[cfg(feature = "dev")]
 pub mod blas;
+
 pub mod cpu;
 pub mod pfunc;
 pub mod ops;

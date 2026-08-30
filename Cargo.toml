@@ -19,10 +19,8 @@ rust.unsafe_code = "allow"
 
 [dependencies]
 pyo3 = "0.29.0"
-pulp = "0.22.3"
 rayon   = "1.10"
 numpy   = "0.29"
-raw-cpuid = "11"
 pyo3-stub-gen = "0.23.0"
 intel-mkl-src = { version = "0.8.1", optional = true, features = ["mkl-static-lp64-seq"] }
 libc = {version = "0.2", optional = true}

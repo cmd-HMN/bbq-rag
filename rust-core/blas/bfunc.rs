@@ -23,17 +23,16 @@
 //Implemntation might be unoptimized as what i am seeing potential downside
 //Like thread_local! and few others
 
-use super::{csgemm};
+use super::{csgemm, max_avx2};
 
 #[cfg(all(target_arch = "x86_64", feature = "dev"))]
 use super::{msgemm};
 
 pub mod bfunction {
-    use crate::cpu::vec256::simd::max_avx2;
     use rayon::prelude::{IntoParallelIterator, ParallelIterator};
     use std::cell::RefCell;
 
-    use super::{csgemm};
+    use super::{csgemm, max_avx2};
 
     #[cfg(all(target_arch = "x86_64", feature = "dev"))]
     use super::{msgemm};

@@ -2,10 +2,13 @@ use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_m
 use std::hint::black_box;
 
 use maxsimd::blas::pro_sgl_doc_msgemm;
-use maxsimd::cpu::{dotmax128_f32avx2 as fused_dot_max_dim128_avx2, dotmaxg_f32avx2 as fused_dot_max_generic_avx2};
+use maxsimd::cpu::{
+    dotmax128_f32 as fused_dot_max_dim128_avx2, dotmaxg_f32 as fused_dot_max_generic_avx2,
+    dotmaxtg_f32,
+};
 // Will change in future updates
 use maxsimd::ops::omaxsim_variable_length;
-use maxsimd::quantization::{qf32_i8_d128, sq128x32_sq8, qf32_i8_d128_to_array};
+use maxsimd::quantization::{qf32_i8_d128, qf32_i8_d128_to_array, sq128x32_sq8};
 
 use rand::random_range;
 
@@ -121,6 +124,17 @@ fn bench_cpu_level_1(c: &mut Criterion) {
                 d_len,
                 dim
             );
+
+            single_func_benchmark!(
+                group,
+                throughput => Throughput::Elements(dim as u64 * q_len as u64 * d_len as u64),
+                BenchmarkId::new("dotmaxtg_f32", d_len),
+                dotmaxtg_f32,
+                q_len,
+                d_len,
+                dim,
+                dim
+            );
         };
 
         // choosing this as sole base line
@@ -153,6 +167,17 @@ fn bench_cpu_level_1(c: &mut Criterion) {
                 throughput => Throughput::Elements(dim as u64 * q_len as u64 * d_len as u64),
                 BenchmarkId::new("fused_dot_max_generic_avx2", dim),
                 fused_dot_max_generic_avx2,
+                q_len,
+                d_len,
+                dim,
+                dim
+            );
+
+            single_func_benchmark!(
+                d_group,
+                throughput => Throughput::Elements(dim as u64 * q_len as u64 * d_len as u64),
+                BenchmarkId::new("dotmaxtg_f32", dim),
+                dotmaxtg_f32,
                 q_len,
                 d_len,
                 dim,

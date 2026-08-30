@@ -2,7 +2,7 @@
 /// Will only run these test if the tag is present so that is not the testing
 /// Earlier used for testing the blas functions
 /// To run these test to cargo tests --features dev
-use maxsimd::blas::{pro_sgl_doc as psd, maxsim_fused_doc_tiles};
+use maxsimd::blas::{pro_sgl_doc as psd, maxsim_fused_doc_tiles, max_avx2};
 
 fn pro_sgl_doc(_q: &[f32], _d: &[f32], _q_len: usize, _d_len: usize, _dim: usize) -> f32 {
     let mut score = 0.0f32;
@@ -208,6 +208,32 @@ fn test_func_maxfusedtiles_doctileslargebatch() {
     assert_maxsim_fused_doc_tiles_eq(&q, &d, q_len, d_len, dim);
 }
 
+
+fn test_max_avx2_slice_boundaries() {
+    for len in 0..=40 {
+        let v: Vec<f32> = (0..len).map(|i| (i as f32) * 1.5 - 10.0).collect();
+        let naive = v.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+        let simd = max_avx2(&v);
+        assert_eq!(simd, naive, "Failed on length {}", len);
+    }
+}
+
+fn test_max_avx2_nans_and_infinities() {
+    assert_eq!(
+        max_avx2(&[f32::NEG_INFINITY, 1.0, f32::INFINITY]),
+        f32::INFINITY
+    );
+    assert_eq!(max_avx2(&[f32::NEG_INFINITY; 50]), f32::NEG_INFINITY);
+
+    let mixed = [f32::NAN, 1.0, 2.0];
+    let expected = mixed.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+    assert_eq!(max_avx2(&mixed), expected);
+}
+
+fn test_max_avx2_all_nans() {
+    assert!(max_avx2(&[f32::NAN; 128]).is_nan());
+}
+
 test_me! {
     group blas {
         sgl_single_token: test_func_prosgldoc_singletokensingledoc,
@@ -223,5 +249,8 @@ test_me! {
         doctiles_pseudorandom: test_func_maxfusedtiles_doctilespseudorandom,
         doctiles_zeros: test_func_maxfusedtiles_doctileszeros,
         doctiles_large_batch: test_func_maxfusedtiles_doctileslargebatch,
+        max_avx2_slice_boundaries: test_max_avx2_slice_boundaries,
+        max_avx2_nans_and_infinities: test_max_avx2_nans_and_infinities,
+        max_avx2_all_nans: test_max_avx2_all_nans
     }
 }

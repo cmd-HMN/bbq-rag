@@ -1,4 +1,5 @@
-from typing import Optional, Any
+from typing import Any, Optional
+
 import torch
 from torch import nn
 from transformers import Idefics3Model, Idefics3PreTrainedModel
@@ -7,6 +8,7 @@ from transformers import logging as tf_logging
 from bbq.src.common.base import BaseModel
 
 tf_logging.set_verbosity_warning()
+
 
 class CIdeficsModel(Idefics3PreTrainedModel, BaseModel):
     """
@@ -70,8 +72,10 @@ class CIdeficsModel(Idefics3PreTrainedModel, BaseModel):
         projected_embeddings: torch.Tensor = self.linear(last_hidden_states)
 
         # normalizes the embedding, antigravity suggested that
-        normalized_embeddings: torch.Tensor = projected_embeddings / projected_embeddings.norm(dim=-1, keepdim=True).clamp(min=1e-12)
-    
+        normalized_embeddings: torch.Tensor = projected_embeddings / projected_embeddings.norm(
+            dim=-1, keepdim=True
+        ).clamp(min=1e-12)
+
         if "attention_mask" in kwargs and kwargs["attention_mask"] is not None:
             normalized_embeddings = normalized_embeddings * kwargs["attention_mask"].unsqueeze(-1)
 
@@ -98,16 +102,18 @@ def sanitize_invalid_model_pad_token_id(config: Any) -> Any:
         vocab_size = getattr(config.text_config, "vocab_size", None)
 
     if vocab_size is not None:
-
         if getattr(config, "pad_token_id", None) is not None and config.pad_token_id >= vocab_size:
             text_pad_id = getattr(getattr(config, "text_config", None), "pad_token_id", None)
             if text_pad_id is not None and text_pad_id < vocab_size:
                 config.pad_token_id = text_pad_id
             else:
                 config.pad_token_id = None
-   
+
         if hasattr(config, "text_config") and config.text_config is not None:
-            if getattr(config.text_config, "pad_token_id", None) is not None and config.text_config.pad_token_id >= vocab_size:
+            if (
+                getattr(config.text_config, "pad_token_id", None) is not None
+                and config.text_config.pad_token_id >= vocab_size
+            ):
                 config.text_config.pad_token_id = None
-    
+
     return config
