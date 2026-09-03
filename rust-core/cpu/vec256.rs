@@ -870,12 +870,4 @@ pub mod simd {
         }
         total
     }
-
-    pub use dotmax128_f32 as dotmax128_f32avx2;
-    pub use dotmaxg_f32 as dotmaxg_f32avx2;
-    pub use dotmax128_f32 as fused_dot_max_dim128_avx2_f32;
-    pub use dotmaxg_f32 as fused_dot_max_generic_avx2_f32;
-    pub use dotmaxg_i8 as fused_dot_max_generic_avx2_i8;
-    pub use ref_maxsimd128_f32 as naive_maxsim_dim128;
-    pub use ref_maxsim_f32 as reference_maxsim;
 }
