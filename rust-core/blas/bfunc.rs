@@ -1,5 +1,4 @@
 // Copyright 2024 cmd-HMN
-//
 // This file includes some or all code from the maxsim-cpu library.
 // https://github.com/mixedbread-ai/maxsim-cpu/blob/main/src/lib.rs
 //
@@ -18,7 +17,6 @@
 //These are only blas function that somehow mimic the maxsim-cpu functionality
 //And only use in the benchmark
 //So no point to unit testing
-//
 //
 //Implemntation might be unoptimized as what i am seeing potential downside
 //Like thread_local! and few others
@@ -90,9 +88,9 @@ pub mod bfunction {
 
     pub fn pro_sgl_doc(_q: &[f32], _d: &[f32], _q_len: usize, _d_len: usize, _dim: usize) -> f32 {
         if _dim == 128 {
-            unsafe { crate::cpu::vec256::simd::dotmax128_f32avx2(_q, _d, _q_len, _d_len) }
+            unsafe { crate::cpu::vec256::simd::dotmax128_f32(_q, _d, _q_len, _d_len) }
         } else {
-            unsafe { crate::cpu::vec256::simd::dotmaxg_f32avx2(_q, _d, _q_len, _d_len, _dim) }
+            unsafe { crate::cpu::vec256::simd::dotmaxg_f32(_q, _d, _q_len, _d_len, _dim) }
         }
     }
 

@@ -4,6 +4,7 @@ pub mod function {
     use crate::cpu::{
         dotmax128_f32 as fused_dot_max_dim128_avx2,
         dotmaxg_f32 as fused_dot_max_generic_avx2, dotmaxtg_f32,
+        dm_f32
     };
     use numpy::{PyReadonlyArray1, PyReadonlyArrayDyn, PyUntypedArrayMethods};
     use pyo3::PyResult;
@@ -102,11 +103,7 @@ pub mod function {
         match d_shape.len() {
             2 => {
                 let doc_tokens = d_shape[0];
-                let score = if dim == 128 {
-                    unsafe { fused_dot_max_dim128_avx2(q_slice, d_slice, q_len, doc_tokens) }
-                } else {
-                    unsafe { fused_dot_max_generic_avx2(q_slice, d_slice, q_len, doc_tokens, dim) }
-                };
+                let score = dm_f32(q_slice, d_slice, q_len, doc_tokens, dim);
                 Ok(vec![score])
             }
             3 => {

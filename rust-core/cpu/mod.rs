@@ -8,5 +8,7 @@ pub use vec256::simd::{
     dotmaxg_i8,
     ref_maxsimd128_f32, 
     ref_maxsim_f32,
-    ref_maxsim_i8
+    ref_maxsim_i8,
+    dm_f32,
+    dm_i8
 };
