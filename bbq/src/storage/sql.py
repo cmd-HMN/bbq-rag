@@ -1,7 +1,7 @@
 import os
 import sqlite3
 from datetime import datetime, timezone
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
 
 from bbq.src.config import get_system_cache_dir
 
@@ -206,9 +206,7 @@ class SqlliteDB:
             )
             connection.commit()
 
-    def update_file_status_to_done(
-        self, file_hash: str, file_path: str, num_pages: int, embedding_path: str
-    ) -> None:
+    def update_file_status_to_done(self, file_hash: str, file_path: str, num_pages: int, embedding_path: str) -> None:
         with self.create_sqlite_connection() as connection:
             cursor = connection.cursor()
             now_iso: str = datetime.now(timezone.utc).isoformat()
@@ -228,9 +226,7 @@ class SqlliteDB:
             )
             connection.commit()
 
-    def update_file_status_to_failed(
-        self, file_hash: str, file_path: str, error_message: str
-    ) -> None:
+    def update_file_status_to_failed(self, file_hash: str, file_path: str, error_message: str) -> None:
         with self.create_sqlite_connection() as connection:
             cursor = connection.cursor()
             now_iso: str = datetime.now(timezone.utc).isoformat()

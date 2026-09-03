@@ -1,4 +1,14 @@
 /// This will act a router
 pub mod vec256;
 
-pub use vec256::simd::{fused_dot_max_dim128_avx2_f32, fused_dot_max_generic_avx2_f32, naive_maxsim_dim128, reference_maxsim, max_avx2};
+pub use vec256::simd::{
+    dotmax128_f32, 
+    dotmaxg_f32, 
+    dotmaxtg_f32,
+    dotmaxg_i8,
+    ref_maxsimd128_f32, 
+    ref_maxsim_f32,
+    ref_maxsim_i8,
+    dm_f32,
+    dm_i8
+};

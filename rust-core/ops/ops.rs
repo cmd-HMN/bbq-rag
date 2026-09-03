@@ -1,7 +1,11 @@
 // /! All maxsim variants used in this project
 
 pub mod function {
-    use crate::cpu::{fused_dot_max_dim128_avx2_f32 as fused_dot_max_dim128_avx2, fused_dot_max_generic_avx2_f32 as fused_dot_max_generic_avx2};
+    use crate::cpu::{
+        dotmax128_f32 as fused_dot_max_dim128_avx2,
+        dotmaxg_f32 as fused_dot_max_generic_avx2, dotmaxtg_f32,
+        dm_f32
+    };
     use numpy::{PyReadonlyArray1, PyReadonlyArrayDyn, PyUntypedArrayMethods};
     use pyo3::PyResult;
     use rayon::prelude::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
@@ -25,23 +29,14 @@ pub mod function {
             curr_offset += doc_len * dim;
         }
 
-        if n_docs <= 4 {
-            let mut results = Vec::with_capacity(n_docs);
-            if dim == 128 {
-                for (offset, doc_len) in offsets {
-                    let doc_data = &d_flat[offset..offset + doc_len * 128];
-                    let score = unsafe { fused_dot_max_dim128_avx2(q, doc_data, q_len, doc_len) };
-                    results.push(score);
-                }
-            } else {
-                for (offset, doc_len) in offsets {
+        if n_docs <= 500 {
+            offsets
+                .into_par_iter()
+                .map(|(offset, doc_len)| {
                     let doc_data = &d_flat[offset..offset + doc_len * dim];
-                    let score =
-                        unsafe { fused_dot_max_generic_avx2(q, doc_data, q_len, doc_len, dim) };
-                    results.push(score);
-                }
-            }
-            results
+                    unsafe { dotmaxtg_f32(q, doc_data, q_len, doc_len, dim) }
+                })
+                .collect()
         } else if dim == 128 {
             offsets
                 .into_par_iter()
@@ -108,19 +103,7 @@ pub mod function {
         match d_shape.len() {
             2 => {
                 let doc_tokens = d_shape[0];
-                let score = if dim == 128 {
-                    unsafe {
-                        fused_dot_max_dim128_avx2(
-                            q_slice, d_slice, q_len, doc_tokens,
-                        )
-                    }
-                } else {
-                    unsafe {
-                        fused_dot_max_generic_avx2(
-                            q_slice, d_slice, q_len, doc_tokens, dim,
-                        )
-                    }
-                };
+                let score = dm_f32(q_slice, d_slice, q_len, doc_tokens, dim);
                 Ok(vec![score])
             }
             3 => {
@@ -231,23 +214,10 @@ pub mod function {
                 let offset = page_idx * page_stride;
                 let page_data = &d_slice[offset..offset + page_stride];
                 if dim == 128 {
-                    unsafe {
-                        fused_dot_max_dim128_avx2(
-                            q_slice,
-                            page_data,
-                            q_len,
-                            tokens_per_page,
-                        )
-                    }
+                    unsafe { fused_dot_max_dim128_avx2(q_slice, page_data, q_len, tokens_per_page) }
                 } else {
                     unsafe {
-                        fused_dot_max_generic_avx2(
-                            q_slice,
-                            page_data,
-                            q_len,
-                            tokens_per_page,
-                            dim,
-                        )
+                        fused_dot_max_generic_avx2(q_slice, page_data, q_len, tokens_per_page, dim)
                     }
                 }
             })
