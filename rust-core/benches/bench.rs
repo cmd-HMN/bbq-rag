@@ -1,13 +1,19 @@
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use std::hint::black_box;
 
-use maxsimd::blas::pro_sgl_doc_msgemm;
+
+#[cfg(treat_feature = "dev")]
+use maxsimd::blas::pro_sgl_doc_msgemm as pro_sgl_doc_blas;
+
+#[cfg(not(target_feature = "dev"))]
+use maxsimd::blas::pro_sgl_doc_csgemm as pro_sgl_doc_blas;
+
 use maxsimd::cpu::{
     dotmax128_f32 as fused_dot_max_dim128_avx2, dotmaxg_f32 as fused_dot_max_generic_avx2,
     dotmaxtg_f32,
 };
 // Will change in future updates
-use maxsimd::ops::omaxsim_variable_length;
+use maxsimd::ops::maxsim;
 use maxsimd::quantization::{qf32_i8_d128, qf32_i8_d128_to_array, sq128x32_sq8};
 
 use rand::random_range;
@@ -226,9 +232,9 @@ fn bench_cpu_level_2(c: &mut Criterion) {
     // [(doc_idx, doc_len, doc_data)]
     let dd = vec![(0_usize, d_len, d_data)];
 
-    group.bench_function("maxsim_variable_length", |b| {
+    group.bench_function("maxsim", |b| {
         b.iter(|| {
-            black_box(omaxsim_variable_length(
+            black_box(omaxsim(
                 black_box(q_data.clone()),
                 black_box(dd.clone()),
                 black_box(q_len),

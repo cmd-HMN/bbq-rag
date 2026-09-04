@@ -2,238 +2,343 @@
 
 pub mod function {
     use crate::cpu::{
-        dotmax128_f32 as fused_dot_max_dim128_avx2,
-        dotmaxg_f32 as fused_dot_max_generic_avx2, dotmaxtg_f32,
-        dm_f32
+        dm_f32, dm_i8
     };
-    use numpy::{PyReadonlyArray1, PyReadonlyArrayDyn, PyUntypedArrayMethods};
-    use pyo3::PyResult;
-    use rayon::prelude::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 
-    pub fn omaxsim_variable_length_slice(
-        q: &[f32],
-        d_flat: &[f32],
-        doc_lengths: &[usize],
+    use crate::quantization::{QParmas, QTYPE, qf32_i8_d128};
+    use rayon::prelude::{IntoParallelIterator, ParallelIterator};
+
+    #[derive(Debug, Clone)]
+    pub enum DocLayout<'a> {
+        Flat { d_len: &'a [usize] },
+        Single { doc_tokens: usize },
+        Batch { docs: usize, tokens: usize },
+    }
+
+    fn process_single_doc(
+        q_ptr: usize,
+        d_ptr: usize,
         q_len: usize,
+        d_len: usize,
+        q_scale_ptr: usize,
+        d_scale_ptr: usize,
         dim: usize,
-    ) -> Vec<f32> {
-        let n_docs = doc_lengths.len();
-        if n_docs == 0 {
-            return Vec::new();
-        }
+        dtype: QTYPE,
+    ) -> f32 {
+        match dtype {
+            QTYPE::Float32 => {
+                let q_slice =
+                    unsafe { std::slice::from_raw_parts(q_ptr as *const f32, q_len * dim) };
 
-        let mut offsets = Vec::with_capacity(n_docs);
-        let mut curr_offset = 0;
-        for &doc_len in doc_lengths {
-            offsets.push((curr_offset, doc_len));
-            curr_offset += doc_len * dim;
-        }
+                let d_slice =
+                    unsafe { std::slice::from_raw_parts(d_ptr as *const f32, d_len * dim) };
 
-        if n_docs <= 500 {
-            offsets
-                .into_par_iter()
-                .map(|(offset, doc_len)| {
-                    let doc_data = &d_flat[offset..offset + doc_len * dim];
-                    unsafe { dotmaxtg_f32(q, doc_data, q_len, doc_len, dim) }
-                })
-                .collect()
-        } else if dim == 128 {
-            offsets
-                .into_par_iter()
-                .map(|(offset, doc_len)| {
-                    let doc_data = &d_flat[offset..offset + doc_len * 128];
-                    unsafe { fused_dot_max_dim128_avx2(q, doc_data, q_len, doc_len) }
-                })
-                .collect()
-        } else {
-            offsets
-                .into_par_iter()
-                .map(|(offset, doc_len)| {
-                    let doc_data = &d_flat[offset..offset + doc_len * dim];
-                    unsafe { fused_dot_max_generic_avx2(q, doc_data, q_len, doc_len, dim) }
-                })
-                .collect()
-        }
-    }
-
-    pub fn omaxsim_variable_length(
-        _q: Vec<f32>,                      // [q_len * dim]
-        _d: Vec<(usize, usize, Vec<f32>)>, // [(doc_idx, doc_len, doc_data)]
-        _q_len: usize,
-        _dim: usize,
-    ) -> Vec<f32> {
-        let n_docs = _d.len();
-        if n_docs == 0 {
-            return Vec::new();
-        }
-
-        let _q = &_q[.._q_len * _dim];
-
-        _d.into_par_iter()
-            .map(|(_doc_idx, doc_len, doc_data)| {
-                let doc_data = &doc_data[..doc_len * _dim];
-                if _dim == 128 {
-                    unsafe { fused_dot_max_dim128_avx2(_q, doc_data, _q_len, doc_len) }
-                } else {
-                    unsafe { fused_dot_max_generic_avx2(_q, doc_data, _q_len, doc_len, _dim) }
-                }
-            })
-            .collect()
-    }
-
-    pub fn omaxsim<'py>(
-        q: PyReadonlyArrayDyn<'py, f32>,
-        d: PyReadonlyArrayDyn<'py, f32>,
-    ) -> PyResult<Vec<f32>> {
-        let q_shape = q.shape();
-        let d_shape = d.shape();
-
-        let (q_len, dim) = match q_shape.len() {
-            2 => (q_shape[0], q_shape[1]),
-            _ => {
-                return Err(pyo3::exceptions::PyValueError::new_err(
-                    "Query array must be 2D of shape (q_len, dim)",
-                ));
+                dm_f32(q_slice, d_slice, q_len, d_len, dim)
             }
-        };
+            QTYPE::Int8 => {
+                let num_blocks = dim / QParmas::BLOCK;
 
-        let q_slice = q.as_slice()?;
-        let d_slice = d.as_slice()?;
+                let q_slice: &[i8] =
+                    unsafe { std::slice::from_raw_parts(q_ptr as *const i8, q_len * dim) };
 
-        match d_shape.len() {
-            2 => {
-                let doc_tokens = d_shape[0];
-                let score = dm_f32(q_slice, d_slice, q_len, doc_tokens, dim);
-                Ok(vec![score])
-            }
-            3 => {
-                let num_pages = d_shape[0];
-                let tokens_per_page = d_shape[1];
-                let page_stride = tokens_per_page * dim;
+                let d_slice: &[i8] =
+                    unsafe { std::slice::from_raw_parts(d_ptr as *const i8, d_len * dim) };
 
-                let scores: Vec<f32> = if num_pages <= 24 {
-                    let mut res = Vec::with_capacity(num_pages);
-                    for page_idx in 0..num_pages {
-                        let offset = page_idx * page_stride;
-                        let page_data = &d_slice[offset..offset + page_stride];
-                        let score = if dim == 128 {
-                            unsafe {
-                                fused_dot_max_dim128_avx2(
-                                    q_slice,
-                                    page_data,
-                                    q_len,
-                                    tokens_per_page,
-                                )
-                            }
-                        } else {
-                            unsafe {
-                                fused_dot_max_generic_avx2(
-                                    q_slice,
-                                    page_data,
-                                    q_len,
-                                    tokens_per_page,
-                                    dim,
-                                )
-                            }
-                        };
-                        res.push(score);
+                static DUMMY_UNIT_SCALE: [f32; 1024] = [1.0f32; 1024];
+
+                let q_scale: &[f32] = if q_scale_ptr != 0 {
+                    unsafe {
+                        std::slice::from_raw_parts(q_scale_ptr as *const f32, q_len * num_blocks)
                     }
-                    res
                 } else {
-                    (0..num_pages)
-                        .into_par_iter()
-                        .with_min_len(8)
-                        .map(|page_idx| {
-                            let offset = page_idx * page_stride;
-                            let page_data = &d_slice[offset..offset + page_stride];
-                            if dim == 128 {
-                                unsafe {
-                                    fused_dot_max_dim128_avx2(
-                                        q_slice,
-                                        page_data,
-                                        q_len,
-                                        tokens_per_page,
-                                    )
-                                }
-                            } else {
-                                unsafe {
-                                    fused_dot_max_generic_avx2(
-                                        q_slice,
-                                        page_data,
-                                        q_len,
-                                        tokens_per_page,
-                                        dim,
-                                    )
-                                }
-                            }
-                        })
-                        .collect()
+                    &DUMMY_UNIT_SCALE[..(q_len * num_blocks).min(1024)]
                 };
 
-                Ok(scores)
-            }
-            _ => Err(pyo3::exceptions::PyValueError::new_err(
-                "Document array must be 2D (tokens, dim) or 3D (num_pages, tokens_per_page, dim)",
-            )),
-        }
-    }
-
-    pub unsafe fn omaxsim_ptr(
-        q_ptr: usize,
-        d_ptr: usize,
-        q_len: usize,
-        doc_tokens: usize,
-        dim: usize,
-    ) -> f32 {
-        let q_slice = unsafe { std::slice::from_raw_parts(q_ptr as *const f32, q_len * dim) };
-        let d_slice = unsafe { std::slice::from_raw_parts(d_ptr as *const f32, doc_tokens * dim) };
-        if dim == 128 {
-            unsafe { fused_dot_max_dim128_avx2(q_slice, d_slice, q_len, doc_tokens) }
-        } else {
-            unsafe { fused_dot_max_generic_avx2(q_slice, d_slice, q_len, doc_tokens, dim) }
-        }
-    }
-
-    pub unsafe fn omaxsim_3d_ptr(
-        q_ptr: usize,
-        d_ptr: usize,
-        q_len: usize,
-        num_pages: usize,
-        tokens_per_page: usize,
-        dim: usize,
-    ) -> Vec<f32> {
-        let q_slice = unsafe { std::slice::from_raw_parts(q_ptr as *const f32, q_len * dim) };
-        let d_slice = unsafe {
-            std::slice::from_raw_parts(d_ptr as *const f32, num_pages * tokens_per_page * dim)
-        };
-        let page_stride = tokens_per_page * dim;
-
-        (0..num_pages)
-            .into_par_iter()
-            .map(|page_idx| {
-                let offset = page_idx * page_stride;
-                let page_data = &d_slice[offset..offset + page_stride];
-                if dim == 128 {
-                    unsafe { fused_dot_max_dim128_avx2(q_slice, page_data, q_len, tokens_per_page) }
-                } else {
+                let d_scale: &[f32] = if d_scale_ptr != 0 {
                     unsafe {
-                        fused_dot_max_generic_avx2(q_slice, page_data, q_len, tokens_per_page, dim)
+                        std::slice::from_raw_parts(d_scale_ptr as *const f32, d_len * num_blocks)
+                    }
+                } else {
+                    &DUMMY_UNIT_SCALE[..(d_len * num_blocks).min(1024)]
+                };
+
+                dm_i8(q_slice, d_slice, q_scale, d_scale, q_len, d_len, dim)
+            }
+            _ => {
+                panic!("Unsupported type, only Float32 and Int8 supported");
+            }
+        }
+    }
+
+    fn execute_jobs<I, T, F>(items: I, jobs: i32, op: F) -> Vec<T>
+    where
+        I: IntoIterator + IntoParallelIterator<Item = <I as IntoIterator>::Item> + Send,
+        <I as IntoIterator>::Item: Send,
+        T: Send,
+        F: Fn(<I as IntoIterator>::Item) -> T + Sync + Send,
+    {
+        if jobs == -1 {
+            items.into_par_iter().map(op).collect()
+        } else if jobs > 1 {
+            let pool = rayon::ThreadPoolBuilder::new()
+                .num_threads(jobs as usize)
+                .build()
+                .expect("Failed to build custom rayon threadpool");
+            pool.install(|| items.into_par_iter().map(op).collect())
+        } else {
+            items.into_iter().map(op).collect()
+        }
+    }
+
+    #[inline(always)]
+    fn process_single(
+        q_ptr: usize,
+        d_ptr: usize,
+        q_len: usize,
+        d_len: usize,
+        q_scale_ptr: usize,
+        d_scale_ptr: usize,
+        dim: usize,
+        dtype: QTYPE,
+    ) -> Vec<f32> {
+        if q_len == 0 || d_len == 0 {
+            return Vec::new();
+        }
+
+        vec![process_single_doc(
+            q_ptr,
+            d_ptr,
+            q_len,
+            d_len,
+            q_scale_ptr,
+            d_scale_ptr,
+            dim,
+            dtype,
+        )]
+    }
+
+    #[inline(always)]
+    fn process_batch(
+        q_ptr: usize,
+        d_ptr: usize,
+        q_len: usize,
+        docs: usize,
+        tokens: usize,
+        jobs: i32,
+        q_scale_ptr: usize,
+        d_scale_ptr: usize,
+        dim: usize,
+        dtype: QTYPE,
+    ) -> Vec<f32> {
+        if q_len == 0 || docs == 0 || tokens == 0 {
+            return Vec::new();
+        }
+
+        let blocks = dim / QParmas::BLOCK;
+        let elem_size = match dtype {
+            QTYPE::Float32 => std::mem::size_of::<f32>(),
+            QTYPE::Int8 => std::mem::size_of::<i8>(),
+            _ => panic!("Unsupported type, only Float32 and Int8 supported"),
+        };
+
+        let scale_elem_size = std::mem::size_of::<f32>();
+
+        let doc_stride_bytes = tokens * dim * elem_size;
+        let scale_stride_bytes = tokens * blocks * scale_elem_size;
+
+        let run = |idx: usize| {
+            let cur_d_ptr = d_ptr + idx * doc_stride_bytes;
+            let cur_d_scale_ptr = if d_scale_ptr != 0 {
+                d_scale_ptr + idx * scale_stride_bytes
+            } else {
+                0
+            };
+
+            process_single_doc(
+                q_ptr,
+                cur_d_ptr,
+                q_len,
+                tokens,
+                q_scale_ptr,
+                cur_d_scale_ptr,
+                dim,
+                dtype,
+            )
+        };
+
+        execute_jobs(0..docs, jobs, run)
+    }
+
+    #[inline(always)]
+    fn process_flat(
+        q_ptr: usize,
+        d_ptr: usize,
+        q_len: usize,
+        d_len: &[usize],
+        jobs: i32,
+        q_scale_ptr: usize,
+        d_scale_ptr: usize,
+        dim: usize,
+        dtype: QTYPE,
+    ) -> Vec<f32> {
+        let n_docs = d_len.len();
+        if q_len == 0 || n_docs == 0 {
+            return Vec::new();
+        }
+
+        let blocks = dim / QParmas::BLOCK;
+        let elem_size = match dtype {
+            QTYPE::Float32 => std::mem::size_of::<f32>(),
+            QTYPE::Int8 => std::mem::size_of::<i8>(),
+            _ => panic!("Unsupported type, only Float32 and Int8 supported"),
+        };
+
+        let scale_elem_size = std::mem::size_of::<f32>();
+
+        let mut offset = Vec::with_capacity(n_docs);
+        let mut curr_token = 0usize;
+        for &len in d_len {
+            offset.push(curr_token);
+            curr_token += len;
+        }
+
+        let run = |idx: usize| {
+            let doc_tokens = d_len[idx];
+            if doc_tokens == 0 {
+                return 0.0f32;
+            }
+
+            let cur_d_ptr = d_ptr + offset[idx] * dim * elem_size;
+            let cur_d_scale_ptr = if d_scale_ptr != 0 {
+                d_scale_ptr + offset[idx] * blocks * scale_elem_size
+            } else {
+                0
+            };
+
+            process_single_doc(
+                q_ptr,
+                cur_d_ptr,
+                q_len,
+                doc_tokens,
+                q_scale_ptr,
+                cur_d_scale_ptr,
+                dim,
+                dtype,
+            )
+        };
+
+        execute_jobs(0..n_docs, jobs, run)
+    }
+
+    pub unsafe fn maxsim(
+        q_ptr: usize,
+        d_ptr: usize,
+        q_len: usize,
+        q_scale_ptr: usize,
+        d_scale_ptr: usize,
+        dim: usize,
+        layout: DocLayout<'_>,
+        dtype: QTYPE,
+        jobs: i32,
+    ) -> Vec<f32> {
+        match layout {
+            DocLayout::Single { doc_tokens } => {
+                process_single(
+                    q_ptr,
+                    d_ptr,
+                    q_len,
+                    doc_tokens,
+                    q_scale_ptr,
+                    d_scale_ptr,
+                    dim,
+                    dtype,
+                )
+            }
+            DocLayout::Batch { docs, tokens } => {
+                process_batch(
+                    q_ptr,
+                    d_ptr,
+                    q_len,
+                    docs,
+                    tokens,
+                    jobs,
+                    q_scale_ptr,
+                    d_scale_ptr,
+                    dim,
+                    dtype,
+                )
+            }
+            DocLayout::Flat { d_len } => {
+                process_flat(
+                    q_ptr,
+                    d_ptr,
+                    q_len,
+                    d_len,
+                    jobs,
+                    q_scale_ptr,
+                    d_scale_ptr,
+                    dim,
+                    dtype,
+                )
+            }
+        }
+    }
+
+    pub unsafe fn qi8(
+        ptr: usize,
+        tokens: usize,
+        dim: usize,
+        out_ptr: usize,
+        scale_ptr: usize,
+        jobs: i32,
+    ) -> Result<(Vec<i8>, Vec<f32>), String> {
+        if dim != 128 {
+            return Err("Currently qi8 only supports dim=128 vectors".to_string());
+        }
+
+        let num_blocks = dim / QParmas::BLOCK;
+
+        if out_ptr != 0 && scale_ptr != 0 {
+            let src_addr = ptr;
+            let dst_data_addr = out_ptr;
+            let dst_scale_addr = scale_ptr;
+
+            let _ = execute_jobs(0..tokens, jobs, move |t| {
+                unsafe {
+                    let slice = std::slice::from_raw_parts((src_addr as *const f32).add(t * 128), 128);
+                    let qb = qf32_i8_d128(slice);
+                    if let Ok((val, scale)) = qb.to_array::<i8>() {
+                        let dst_d = (dst_data_addr as *mut i8).add(t * 128);
+                        let dst_s = (dst_scale_addr as *mut f32).add(t * 4);
+                        std::ptr::copy_nonoverlapping(val.as_ptr(), dst_d, 128);
+                        std::ptr::copy_nonoverlapping(scale.as_ptr(), dst_s, 4);
                     }
                 }
-            })
-            .collect()
-    }
+            });
 
-    pub fn omaxsim_vrlen<'py>(
-        q: PyReadonlyArray1<'py, f32>,
-        d: PyReadonlyArray1<'py, f32>,
-        doc_lengths: Vec<usize>,
-        q_len: usize,
-        dim: usize,
-    ) -> Vec<f32> {
-        let q_slice = q.as_slice().expect("q must be contiguous");
-        let d_slice = d.as_slice().expect("d must be contiguous");
+            Ok((Vec::new(), Vec::new()))
+        } else {
+            let mut out_data = vec![0i8; tokens * dim];
+            let mut out_scales = vec![0.0f32; tokens * num_blocks];
 
-        omaxsim_variable_length_slice(q_slice, d_slice, &doc_lengths, q_len, dim)
+            let src_addr = ptr;
+            let dst_data_addr = out_data.as_mut_ptr() as usize;
+            let dst_scale_addr = out_scales.as_mut_ptr() as usize;
+
+            let _ = execute_jobs(0..tokens, jobs, move |t| {
+                unsafe {
+                    let slice = std::slice::from_raw_parts((src_addr as *const f32).add(t * 128), 128);
+                    let qb = qf32_i8_d128(slice);
+                    if let Ok((val, scale)) = qb.to_array::<i8>() {
+                        let dst_d = (dst_data_addr as *mut i8).add(t * 128);
+                        let dst_s = (dst_scale_addr as *mut f32).add(t * 4);
+                        std::ptr::copy_nonoverlapping(val.as_ptr(), dst_d, 128);
+                        std::ptr::copy_nonoverlapping(scale.as_ptr(), dst_s, 4);
+                    }
+                }
+            });
+
+            Ok((out_data, out_scales))
+        }
     }
 }

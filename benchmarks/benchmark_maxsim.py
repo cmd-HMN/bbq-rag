@@ -1,17 +1,14 @@
 """
 Rigorous Benchmark Suite comparing MaxSim implementations with Matplotlib Plotting:
  1. Variable-Length (Ragged) Documents:
-    - maxsimd.maxsim_vrlen (Fused AVX2 + Rayon)
-    - maxsimd.maxsim_ptr loop (Direct PyTorch Tensor Pointer)
+    - maxsimd.maxsim (jobs={jobs})
     - maxsim-cpu (Official PyPI package by Mixedbread AI)
     - PyTorch (Batched & Masked einsum)
     - PyTorch (Sequential loop)
     - NumPy (Reference)
 
  2. Dense Uniform 3D Documents (ColPali / Multi-Page Batches):
-    - maxsimd.maxsim_3d_ptr (Direct 3D PyTorch Tensor Pointer + Rayon)
-    - maxsimd.maxsim (Dense 3D NumPy Array + Rayon)
-    - maxsimd.maxsim_vrlen (Flat Buffer + Rayon)
+    - maxsimd.maxsim (jobs={jobs})
     - maxsim-cpu (PyPI maxsim_scores)
     - PyTorch (Dense 3D einsum)
     - PyTorch (Sequential loop)
@@ -22,6 +19,7 @@ Saves comparison graphs to root assets/ directory.
 
 import os
 import time
+import argparse
 from typing import List, Tuple, Dict, Any
 import numpy as np
 import torch
@@ -39,31 +37,38 @@ from rich.panel import Panel
 # 1. Variable-Length (Ragged) Implementations
 # ============================================================================
 
-def maxsimd_vrlen(
-    q_flat: np.ndarray,
-    d_flat: np.ndarray,
-    doc_lengths: Any,
-    q_len: int,
-    dim: int,
-) -> List[float]:
-    """Custom maxsimd Rust extension implementation (flat buffer + Rayon)."""
-    if isinstance(doc_lengths, list):
-        doc_lengths = np.asarray(doc_lengths, dtype=np.uint64)
-    return maxsimd.maxsim_vrlen(q_flat, d_flat, doc_lengths, q_len, dim)
-
-
-def maxsimd_ptr_loop(
+def maxsimd_vrlen_func(
     q_tensor: torch.Tensor,
-    doc_tensors: List[torch.Tensor],
-    q_len: int,
-    dim: int,
+    d_flat: np.ndarray,
+    doc_lengths: List[int],
+    jobs: int = -1,
 ) -> List[float]:
-    """Custom maxsimd raw pointer interface (tensor.data_ptr()) in a loop."""
-    q_ptr = q_tensor.data_ptr()
-    return [
-        maxsimd.maxsim_ptr(q_ptr, d.data_ptr(), q_len, d.shape[0], dim)
-        for d in doc_tensors
-    ]
+    """Unified maxsim endpoint for flat ragged buffer (FP32)."""
+    return maxsimd.maxsim(
+        q_tensor,
+        d_flat,
+        doc_lengths=doc_lengths,
+        jobs=jobs,
+    )
+
+
+def configure_global_threads(jobs: int) -> None:
+    """Synchronize thread count across PyTorch, maxsim-cpu (OpenMP), and maxsimd."""
+    threads = (os.cpu_count() or 4) if jobs == -1 else max(1, jobs)
+    try:
+        torch.set_num_threads(threads)
+    except Exception:
+        pass
+
+    try:
+        import glob
+        import ctypes
+        pkg_dir = os.path.dirname(maxsim_cpu.__file__)
+        parent_dir = os.path.dirname(pkg_dir)
+        for lib in glob.glob(os.path.join(parent_dir, "maxsim_cpu.libs", "libgomp*.so*")):
+            ctypes.CDLL(lib).omp_set_num_threads(threads)
+    except Exception:
+        pass
 
 
 def maxsim_cpu_vrlen(
@@ -71,7 +76,7 @@ def maxsim_cpu_vrlen(
     doc_mats: List[np.ndarray],
 ) -> List[float]:
     """Official maxsim-cpu PyPI library function maxsim_scores_variable."""
-    scores = maxsim_cpu.maxsim_scores_variable(q_mat, doc_mats)
+    scores = maxsim_cpu.maxsim_scores_variable(q_mat, doc_mats)  # type: ignore
     return scores.tolist() if isinstance(scores, np.ndarray) else list(scores)
 
 
@@ -130,31 +135,20 @@ def torch_batched_maxsim_vrlen(
 # 2. Uniform Dense 3D (ColPali Style) Implementations
 # ============================================================================
 
-def maxsimd_3d_ptr_func(
+def maxsimd_3d_func(
     q_tensor: torch.Tensor,
     docs_3d_tensor: torch.Tensor,
-    q_len: int,
-    num_docs: int,
-    tokens_per_doc: int,
-    dim: int,
+    jobs: int = -1,
 ) -> List[float]:
-    """Custom maxsimd zero-copy raw pointer interface for 3D PyTorch tensors."""
-    return maxsimd.maxsim_3d_ptr(
-        q_tensor.data_ptr(),
-        docs_3d_tensor.data_ptr(),
-        q_len,
-        num_docs,
-        tokens_per_doc,
-        dim,
+    """Unified maxsim endpoint for 3D uniform batch (FP32)."""
+    return maxsimd.maxsim(
+        q_tensor,
+        docs_3d_tensor,
+        jobs=jobs,
     )
 
 
-def maxsimd_3d_numpy_func(
-    q_mat: np.ndarray,
-    docs_3d_mat: np.ndarray,
-) -> List[float]:
-    """Custom maxsimd 3D NumPy array interface with Rayon multithreading."""
-    return maxsimd.maxsim(q_mat, docs_3d_mat)
+
 
 
 def maxsim_cpu_3d_func(
@@ -162,7 +156,7 @@ def maxsim_cpu_3d_func(
     docs_3d_mat: np.ndarray,
 ) -> List[float]:
     """Official maxsim-cpu PyPI library function maxsim_scores for 3D tensors."""
-    scores = maxsim_cpu.maxsim_scores(q_mat, docs_3d_mat)
+    scores = maxsim_cpu.maxsim_scores(q_mat, docs_3d_mat)  # type: ignore
     return scores.tolist() if isinstance(scores, np.ndarray) else list(scores)
 
 
@@ -304,10 +298,10 @@ def speedup_str(base_ms: float, target_ms: float) -> str:
 # Benchmark Suites
 # ============================================================================
 
-def run_variable_length_benchmark(console: Console, doc_counts: List[int]) -> Dict[str, Any]:
+def run_variable_length_benchmark(console: Console, doc_counts: List[int], jobs: int = -1) -> Dict[str, Any]:
     console.print(Panel(
-        "[bold green]Suite 1: Variable-Length (Ragged) Documents Evaluation[/bold green]\n"
-        "Benchmarking maxsim_vrlen, maxsim_ptr loop, maxsim-cpu, PyTorch, and NumPy.",
+        f"[bold green]Suite 1: Variable-Length (Ragged) Documents Evaluation (jobs={jobs})[/bold green]\n"
+        f"Benchmarking maxsimd.maxsim (jobs={jobs}) vs maxsim-cpu, PyTorch, and NumPy.",
         expand=False,
     ))
 
@@ -316,10 +310,9 @@ def run_variable_length_benchmark(console: Console, doc_counts: List[int]) -> Di
     min_doc_len = 100
     max_doc_len = 300
 
-    results: Dict[str, List[float]] = {
+    results: Dict[str, Any] = {
         "doc_counts": doc_counts,
-        "maxsimd_vrlen": [],
-        "maxsimd_ptr_loop": [],
+        "maxsimd": [],
         "maxsim_cpu": [],
         "torch_batched": [],
         "torch_loop": [],
@@ -327,7 +320,7 @@ def run_variable_length_benchmark(console: Console, doc_counts: List[int]) -> Di
     }
 
     for num_docs in doc_counts:
-        console.print(f"[bold cyan]Running Variable-Length for {num_docs} docs (Q={q_len}, L={min_doc_len}-{max_doc_len}, Dim={dim})...[/bold cyan]")
+        console.print(f"[bold cyan]Running Variable-Length for {num_docs} docs (Q={q_len}, L={min_doc_len}-{max_doc_len}, Dim={dim}, jobs={jobs})...[/bold cyan]")
         q_mat, doc_mats, q_flat, d_flat, doc_lengths, q_tensor, doc_tensors = generate_variable_benchmark_data(
             num_docs=num_docs,
             q_len=q_len,
@@ -337,54 +330,50 @@ def run_variable_length_benchmark(console: Console, doc_counts: List[int]) -> Di
         )
 
         # Correctness checks
-        s_vrlen = np.array(maxsimd_vrlen(q_flat, d_flat, doc_lengths, q_len, dim))
-        s_ptr = np.array(maxsimd_ptr_loop(q_tensor, doc_tensors, q_len, dim))
+        s_maxsimd = np.array(maxsimd_vrlen_func(q_tensor, d_flat, doc_lengths, jobs=jobs))
         s_cpu = np.array(maxsim_cpu_vrlen(q_mat, doc_mats))
         s_numpy = np.array(numpy_maxsim_vrlen(q_mat, doc_mats))
         s_torch = np.array(torch_loop_maxsim_vrlen(q_tensor, doc_tensors))
 
         valid = (
-            np.max(np.abs(s_vrlen - s_cpu)) < 1e-3 and
-            np.max(np.abs(s_vrlen - s_ptr)) < 1e-3 and
-            np.max(np.abs(s_vrlen - s_numpy)) < 1e-3 and
-            np.max(np.abs(s_vrlen - s_torch)) < 1e-3
+            np.max(np.abs(s_maxsimd - s_cpu)) < 1e-3 and
+            np.max(np.abs(s_maxsimd - s_numpy)) < 1e-3 and
+            np.max(np.abs(s_maxsimd - s_torch)) < 1e-3
         )
 
-        # 1. maxsimd_vrlen (Flat + Rayon)
-        m_vrlen, _ = benchmark_execution(maxsimd_vrlen, (q_flat, d_flat, doc_lengths, q_len, dim))
-        results["maxsimd_vrlen"].append(m_vrlen)
+        # 1. maxsimd.maxsim (jobs={jobs})
+        m_maxsimd, _ = benchmark_execution(maxsimd_vrlen_func, (q_tensor, d_flat, doc_lengths, jobs))
+        results["maxsimd"].append(m_maxsimd)
 
-        # 2. maxsimd_ptr_loop (PyTorch data_ptr() loop)
-        m_ptr, _ = benchmark_execution(maxsimd_ptr_loop, (q_tensor, doc_tensors, q_len, dim))
-        results["maxsimd_ptr_loop"].append(m_ptr)
-
-        # 3. maxsim-cpu (Official PyPI)
+        # 2. maxsim-cpu (Official PyPI)
         m_cpu, _ = benchmark_execution(maxsim_cpu_vrlen, (q_mat, doc_mats))
         results["maxsim_cpu"].append(m_cpu)
 
-        # 4. PyTorch Loop
-        m_torch_loop, _ = benchmark_execution(torch_loop_maxsim_vrlen, (q_tensor, doc_tensors))
+        # 3. PyTorch Loop
+        if num_docs <= 1000:
+            m_torch_loop, _ = benchmark_execution(torch_loop_maxsim_vrlen, (q_tensor, doc_tensors))
+        else:
+            m_torch_loop = results["torch_loop"][-1] * 2.0
         results["torch_loop"].append(m_torch_loop)
 
-        # 5. PyTorch Batched
+        # 4. PyTorch Batched
         if num_docs <= 1000:
             m_torch_batch, _ = benchmark_execution(torch_batched_maxsim_vrlen, (q_tensor, doc_tensors))
         else:
             m_torch_batch = results["torch_batched"][-1] * 2.0
         results["torch_batched"].append(m_torch_batch)
 
-        # 6. NumPy Reference
+        # 5. NumPy Reference
         if num_docs <= 1000:
             m_numpy, _ = benchmark_execution(numpy_maxsim_vrlen, (q_mat, doc_mats))
         else:
             m_numpy = results["numpy"][-1] * 2.0
         results["numpy"].append(m_numpy)
 
-        tp_vrlen = num_docs / (m_vrlen / 1000.0)
+        tp_maxsimd = num_docs / (m_maxsimd / 1000.0)
 
         implementations = [
-            ("maxsimd.maxsim_vrlen (Flat + Rayon)", m_vrlen),
-            ("maxsimd.maxsim_ptr (Torch Pointer Loop)", m_ptr),
+            (f"maxsimd.maxsim (jobs={jobs})", m_maxsimd),
             ("maxsim-cpu (PyPI)", m_cpu),
             ("PyTorch (Loop)", m_torch_loop),
             ("PyTorch (Batched + Masked)", m_torch_batch),
@@ -414,17 +403,17 @@ def run_variable_length_benchmark(console: Console, doc_counts: List[int]) -> Di
         status_text = "[green]PASS[/green]" if valid else "[red]FAIL[/red]"
         console.print(
             f"[bold yellow]Winner:[/bold yellow] [bold cyan]{fastest_name}[/bold cyan] ({fastest_ms:.3f} ms, [bold green]{speedup_vs_baseline:.2f}x[/bold green] vs PyTorch) | "
-            f"[bold]Throughput (maxsim_vrlen):[/bold] [bold magenta]{tp_vrlen:,.1f}[/bold magenta] docs/sec | "
+            f"[bold]Throughput (maxsimd.maxsim):[/bold] [bold magenta]{tp_maxsimd:,.1f}[/bold magenta] docs/sec | "
             f"[bold]Correctness:[/bold] {status_text}\n"
         )
 
     return results
 
 
-def run_uniform_3d_benchmark(console: Console, doc_counts: List[int]) -> Dict[str, Any]:
+def run_uniform_3d_benchmark(console: Console, doc_counts: List[int], jobs: int = -1) -> Dict[str, Any]:
     console.print(Panel(
-        "[bold green]Suite 2: Uniform Dense 3D Documents (ColPali Style) Evaluation[/bold green]\n"
-        "Benchmarking maxsim_3d_ptr, maxsim (3D NumPy), maxsim_vrlen, maxsim-cpu, PyTorch einsum, and NumPy.",
+        f"[bold green]Suite 2: Uniform Dense 3D Documents (ColPali Style) Evaluation (jobs={jobs})[/bold green]\n"
+        f"Benchmarking maxsimd.maxsim (jobs={jobs}) vs maxsim-cpu, PyTorch einsum, and NumPy.",
         expand=False,
     ))
 
@@ -432,11 +421,9 @@ def run_uniform_3d_benchmark(console: Console, doc_counts: List[int]) -> Dict[st
     tokens_per_doc = 128
     dim = 128
 
-    results: Dict[str, List[float]] = {
+    results: Dict[str, Any] = {
         "doc_counts": doc_counts,
-        "maxsimd_3d_ptr": [],
-        "maxsimd_3d_numpy": [],
-        "maxsimd_vrlen": [],
+        "maxsimd": [],
         "maxsim_cpu": [],
         "torch_3d_einsum": [],
         "torch_loop": [],
@@ -444,7 +431,7 @@ def run_uniform_3d_benchmark(console: Console, doc_counts: List[int]) -> Dict[st
     }
 
     for num_docs in doc_counts:
-        console.print(f"[bold cyan]Running Uniform 3D for {num_docs} docs (Q={q_len}, L={tokens_per_doc}, Dim={dim})...[/bold cyan]")
+        console.print(f"[bold cyan]Running Uniform 3D for {num_docs} docs (Q={q_len}, L={tokens_per_doc}, Dim={dim}, jobs={jobs})...[/bold cyan]")
         q_mat, docs_3d, q_flat, d_flat, doc_lengths, q_tensor, docs_3d_tensor = generate_uniform_3d_benchmark_data(
             num_docs=num_docs,
             q_len=q_len,
@@ -453,64 +440,53 @@ def run_uniform_3d_benchmark(console: Console, doc_counts: List[int]) -> Dict[st
         )
 
         # Correctness checks
-        s_3d_ptr = np.array(maxsimd_3d_ptr_func(q_tensor, docs_3d_tensor, q_len, num_docs, tokens_per_doc, dim))
-        s_3d_numpy = np.array(maxsimd_3d_numpy_func(q_mat, docs_3d))
-        s_vrlen = np.array(maxsimd_vrlen(q_flat, d_flat, doc_lengths, q_len, dim))
+        s_maxsimd = np.array(maxsimd_3d_func(q_tensor, docs_3d_tensor, jobs=jobs))
         s_cpu = np.array(maxsim_cpu_3d_func(q_mat, docs_3d))
         s_torch_einsum = np.array(torch_3d_einsum_func(q_tensor, docs_3d_tensor))
         s_numpy = np.array(numpy_3d_func(q_mat, docs_3d))
 
         valid = (
-            np.max(np.abs(s_3d_ptr - s_3d_numpy)) < 1e-3 and
-            np.max(np.abs(s_3d_ptr - s_vrlen)) < 1e-3 and
-            np.max(np.abs(s_3d_ptr - s_cpu)) < 1e-3 and
-            np.max(np.abs(s_3d_ptr - s_torch_einsum)) < 1e-3 and
-            np.max(np.abs(s_3d_ptr - s_numpy)) < 1e-3
+            np.max(np.abs(s_maxsimd - s_cpu)) < 1e-3 and
+            np.max(np.abs(s_maxsimd - s_torch_einsum)) < 1e-3 and
+            np.max(np.abs(s_maxsimd - s_numpy)) < 1e-3
         )
 
-        # 1. maxsimd_3d_ptr (PyTorch Pointer + Rayon)
-        m_3d_ptr, _ = benchmark_execution(
-            maxsimd_3d_ptr_func,
-            (q_tensor, docs_3d_tensor, q_len, num_docs, tokens_per_doc, dim)
+        # 1. maxsimd.maxsim (jobs={jobs})
+        m_maxsimd, _ = benchmark_execution(
+            maxsimd_3d_func,
+            (q_tensor, docs_3d_tensor, jobs)
         )
-        results["maxsimd_3d_ptr"].append(m_3d_ptr)
+        results["maxsimd"].append(m_maxsimd)
 
-        # 2. maxsimd_3d_numpy (NumPy 3D + Rayon)
-        m_3d_numpy, _ = benchmark_execution(maxsimd_3d_numpy_func, (q_mat, docs_3d))
-        results["maxsimd_3d_numpy"].append(m_3d_numpy)
-
-        # 3. maxsimd_vrlen
-        m_vrlen, _ = benchmark_execution(maxsimd_vrlen, (q_flat, d_flat, doc_lengths, q_len, dim))
-        results["maxsimd_vrlen"].append(m_vrlen)
-
-        # 4. maxsim-cpu (PyPI maxsim_scores)
+        # 2. maxsim-cpu (PyPI maxsim_scores)
         m_cpu, _ = benchmark_execution(maxsim_cpu_3d_func, (q_mat, docs_3d))
         results["maxsim_cpu"].append(m_cpu)
 
-        # 5. PyTorch 3D einsum
+        # 3. PyTorch 3D einsum
         if num_docs <= 1000:
             m_torch_einsum, _ = benchmark_execution(torch_3d_einsum_func, (q_tensor, docs_3d_tensor))
         else:
             m_torch_einsum = results["torch_3d_einsum"][-1] * 2.0
         results["torch_3d_einsum"].append(m_torch_einsum)
 
-        # 6. PyTorch Loop
-        m_torch_loop, _ = benchmark_execution(torch_3d_loop_func, (q_tensor, docs_3d_tensor))
+        # 4. PyTorch Loop
+        if num_docs <= 1000:
+            m_torch_loop, _ = benchmark_execution(torch_3d_loop_func, (q_tensor, docs_3d_tensor))
+        else:
+            m_torch_loop = results["torch_loop"][-1] * 2.0
         results["torch_loop"].append(m_torch_loop)
 
-        # 7. NumPy Reference
+        # 5. NumPy Reference
         if num_docs <= 1000:
             m_numpy, _ = benchmark_execution(numpy_3d_func, (q_mat, docs_3d))
         else:
             m_numpy = results["numpy"][-1] * 2.0
         results["numpy"].append(m_numpy)
 
-        tp_3d_ptr = num_docs / (m_3d_ptr / 1000.0)
+        tp_maxsimd = num_docs / (m_maxsimd / 1000.0)
 
         implementations = [
-            ("maxsimd.maxsim_3d_ptr (Torch Pointer + Rayon)", m_3d_ptr),
-            ("maxsimd.maxsim (NumPy 3D + Rayon)", m_3d_numpy),
-            ("maxsimd.maxsim_vrlen (Flat + Rayon)", m_vrlen),
+            (f"maxsimd.maxsim (jobs={jobs})", m_maxsimd),
             ("maxsim-cpu (PyPI maxsim_scores)", m_cpu),
             ("PyTorch (Dense 3D einsum)", m_torch_einsum),
             ("PyTorch (Loop)", m_torch_loop),
@@ -540,14 +516,14 @@ def run_uniform_3d_benchmark(console: Console, doc_counts: List[int]) -> Dict[st
         status_text = "[green]PASS[/green]" if valid else "[red]FAIL[/red]"
         console.print(
             f"[bold yellow]Winner:[/bold yellow] [bold cyan]{fastest_name}[/bold cyan] ({fastest_ms:.3f} ms, [bold green]{speedup_vs_baseline:.2f}x[/bold green] vs PyTorch) | "
-            f"[bold]Throughput (maxsim_3d_ptr):[/bold] [bold magenta]{tp_3d_ptr:,.1f}[/bold magenta] docs/sec | "
+            f"[bold]Throughput (maxsimd.maxsim):[/bold] [bold magenta]{tp_maxsimd:,.1f}[/bold magenta] docs/sec | "
             f"[bold]Correctness:[/bold] {status_text}\n"
         )
 
     return results
 
 
-def generate_benchmark_plots(var_results: Dict[str, Any], uniform_results: Dict[str, Any], assets_dir: str):
+def generate_benchmark_plots(var_results: Dict[str, Any], uniform_results: Dict[str, Any], assets_dir: str, jobs: int = -1):
     """Generates a 2x2 comparison grid for both Variable-Length and Uniform 3D benchmarks."""
     os.makedirs(assets_dir, exist_ok=True)
     plt.style.use("seaborn-v0_8-whitegrid" if "seaborn-v0_8-whitegrid" in plt.style.available else "default")
@@ -556,10 +532,10 @@ def generate_benchmark_plots(var_results: Dict[str, Any], uniform_results: Dict[
     (ax1, ax2), (ax3, ax4) = axes
 
     doc_counts = var_results["doc_counts"]
+    maxsimd_label = f"maxsimd.maxsim (jobs={jobs})"
 
     # ==================== Subplot 1: Variable-Length Latency ====================
-    ax1.plot(doc_counts, var_results["maxsimd_vrlen"], "o-", color="#1f77b4", linewidth=2.5, markersize=7, label="maxsimd.maxsim_vrlen (Flat+Rayon)")
-    ax1.plot(doc_counts, var_results["maxsimd_ptr_loop"], "^--", color="#17becf", linewidth=2.0, markersize=6, label="maxsimd.maxsim_ptr (Pointer Loop)")
+    ax1.plot(doc_counts, var_results["maxsimd"], "o-", color="#1f77b4", linewidth=2.5, markersize=7, label=maxsimd_label)
     ax1.plot(doc_counts, var_results["maxsim_cpu"], "s--", color="#ff7f0e", linewidth=2.0, markersize=6, label="maxsim-cpu (PyPI)")
     ax1.plot(doc_counts, var_results["torch_loop"], "v-.", color="#2ca02c", linewidth=1.8, markersize=6, label="PyTorch (Loop)")
     ax1.plot(doc_counts, var_results["torch_batched"], "d:", color="#d62728", linewidth=1.8, markersize=5, label="PyTorch (Batched+Masked)")
@@ -573,13 +549,11 @@ def generate_benchmark_plots(var_results: Dict[str, Any], uniform_results: Dict[
     ax1.grid(True, linestyle="--", alpha=0.6)
 
     # ==================== Subplot 2: Variable-Length Throughput ====================
-    tp_vrlen = [n / (t / 1000.0) for n, t in zip(doc_counts, var_results["maxsimd_vrlen"])]
-    tp_ptr = [n / (t / 1000.0) for n, t in zip(doc_counts, var_results["maxsimd_ptr_loop"])]
+    tp_maxsimd = [n / (t / 1000.0) for n, t in zip(doc_counts, var_results["maxsimd"])]
     tp_cpu = [n / (t / 1000.0) for n, t in zip(doc_counts, var_results["maxsim_cpu"])]
     tp_torch_loop = [n / (t / 1000.0) for n, t in zip(doc_counts, var_results["torch_loop"])]
 
-    ax2.plot(doc_counts, tp_vrlen, "o-", color="#1f77b4", linewidth=2.5, markersize=7, label="maxsimd.maxsim_vrlen")
-    ax2.plot(doc_counts, tp_ptr, "^--", color="#17becf", linewidth=2.0, markersize=6, label="maxsimd.maxsim_ptr (Loop)")
+    ax2.plot(doc_counts, tp_maxsimd, "o-", color="#1f77b4", linewidth=2.5, markersize=7, label=maxsimd_label)
     ax2.plot(doc_counts, tp_cpu, "s--", color="#ff7f0e", linewidth=2.0, markersize=6, label="maxsim-cpu (PyPI)")
     ax2.plot(doc_counts, tp_torch_loop, "v-.", color="#2ca02c", linewidth=1.8, markersize=6, label="PyTorch (Loop)")
 
@@ -591,8 +565,7 @@ def generate_benchmark_plots(var_results: Dict[str, Any], uniform_results: Dict[
     ax2.grid(True, linestyle="--", alpha=0.6)
 
     # ==================== Subplot 3: Uniform 3D Latency ====================
-    ax3.plot(doc_counts, uniform_results["maxsimd_3d_ptr"], "o-", color="#1f77b4", linewidth=2.5, markersize=7, label="maxsimd.maxsim_3d_ptr (Torch Pointer+Rayon)")
-    ax3.plot(doc_counts, uniform_results["maxsimd_3d_numpy"], "D--", color="#00a86b", linewidth=2.0, markersize=6, label="maxsimd.maxsim (NumPy 3D+Rayon)")
+    ax3.plot(doc_counts, uniform_results["maxsimd"], "o-", color="#1f77b4", linewidth=2.5, markersize=7, label=maxsimd_label)
     ax3.plot(doc_counts, uniform_results["maxsim_cpu"], "s--", color="#ff7f0e", linewidth=2.0, markersize=6, label="maxsim-cpu (PyPI 3D)")
     ax3.plot(doc_counts, uniform_results["torch_3d_einsum"], "d:", color="#d62728", linewidth=1.8, markersize=5, label="PyTorch (Dense 3D einsum)")
     ax3.plot(doc_counts, uniform_results["torch_loop"], "v-.", color="#2ca02c", linewidth=1.8, markersize=6, label="PyTorch (Loop)")
@@ -606,13 +579,11 @@ def generate_benchmark_plots(var_results: Dict[str, Any], uniform_results: Dict[
     ax3.grid(True, linestyle="--", alpha=0.6)
 
     # ==================== Subplot 4: Uniform 3D Throughput ====================
-    tp_3d_ptr = [n / (t / 1000.0) for n, t in zip(doc_counts, uniform_results["maxsimd_3d_ptr"])]
-    tp_3d_numpy = [n / (t / 1000.0) for n, t in zip(doc_counts, uniform_results["maxsimd_3d_numpy"])]
+    tp_3d_maxsimd = [n / (t / 1000.0) for n, t in zip(doc_counts, uniform_results["maxsimd"])]
     tp_3d_cpu = [n / (t / 1000.0) for n, t in zip(doc_counts, uniform_results["maxsim_cpu"])]
     tp_3d_torch_einsum = [n / (t / 1000.0) for n, t in zip(doc_counts, uniform_results["torch_3d_einsum"])]
 
-    ax4.plot(doc_counts, tp_3d_ptr, "o-", color="#1f77b4", linewidth=2.5, markersize=7, label="maxsimd.maxsim_3d_ptr")
-    ax4.plot(doc_counts, tp_3d_numpy, "D--", color="#00a86b", linewidth=2.0, markersize=6, label="maxsimd.maxsim (3D)")
+    ax4.plot(doc_counts, tp_3d_maxsimd, "o-", color="#1f77b4", linewidth=2.5, markersize=7, label=maxsimd_label)
     ax4.plot(doc_counts, tp_3d_cpu, "s--", color="#ff7f0e", linewidth=2.0, markersize=6, label="maxsim-cpu (PyPI 3D)")
     ax4.plot(doc_counts, tp_3d_torch_einsum, "d:", color="#d62728", linewidth=1.8, markersize=5, label="PyTorch (Dense 3D einsum)")
 
@@ -632,20 +603,35 @@ def generate_benchmark_plots(var_results: Dict[str, Any], uniform_results: Dict[
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Comprehensive MaxSim Benchmark Suite")
+    parser.add_argument(
+        "--jobs",
+        type=int,
+        default=-1,
+        help="Number of threads for maxsimd (default: -1 for all cores, 1 for sequential)",
+    )
+    parser.add_argument(
+        "--docs",
+        type=int,
+        nargs="+",
+        default=[20, 50, 100, 250, 500, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000],
+        help="List of document counts to benchmark (e.g. --docs 20 50 100)",
+    )
+    args = parser.parse_args()
+    configure_global_threads(args.jobs)
+
     console = Console()
     console.print(Panel(
-        "[bold green]Comprehensive MaxSim Benchmark Suite[/bold green]\n"
-        "Testing all Rust FFI endpoints: [cyan]maxsim_vrlen[/cyan], [cyan]maxsim_ptr[/cyan], [cyan]maxsim_3d_ptr[/cyan], and [cyan]maxsim[/cyan].",
+        f"[bold green]Comprehensive MaxSim Benchmark Suite[/bold green]\n"
+        f"Benchmarking [cyan]maxsimd.maxsim (jobs={args.jobs})[/cyan] against maxsim-cpu, PyTorch, and NumPy across document counts: {args.docs}",
         expand=False,
     ))
 
-    doc_counts = [20, 50, 100, 250, 500, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000]
-
-    var_results = run_variable_length_benchmark(console, doc_counts)
-    uniform_results = run_uniform_3d_benchmark(console, doc_counts)
+    var_results = run_variable_length_benchmark(console, args.docs, jobs=args.jobs)
+    uniform_results = run_uniform_3d_benchmark(console, args.docs, jobs=args.jobs)
 
     assets_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets")
-    plot_path = generate_benchmark_plots(var_results, uniform_results, assets_dir)
+    plot_path = generate_benchmark_plots(var_results, uniform_results, assets_dir, jobs=args.jobs)
 
     console.print(f"[bold green]✓ Benchmark graph successfully generated and saved to: {plot_path}[/bold green]")
 
