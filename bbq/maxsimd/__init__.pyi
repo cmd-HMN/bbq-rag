@@ -2,41 +2,39 @@
 # ruff: noqa: E501, F401, F403, F405
 
 import builtins
-import numpy
-import numpy.typing
 import typing
 
 __all__ = [
     "maxsim",
-    "maxsim_3d_ptr",
-    "maxsim_ptr",
-    "maxsim_vrlen",
 ]
 
 def maxsim(
-    q: numpy.typing.NDArray[numpy.float32], d: numpy.typing.NDArray[numpy.float32]
-) -> builtins.list[builtins.float]: ...
-def maxsim_3d_ptr(
     q_ptr: builtins.int,
     d_ptr: builtins.int,
     q_len: builtins.int,
-    num_pages: builtins.int,
-    tokens_per_page: builtins.int,
     dim: builtins.int,
-) -> builtins.list[builtins.float]: ...
-def maxsim_ptr(
-    q_ptr: builtins.int,
-    d_ptr: builtins.int,
-    q_len: builtins.int,
+    layout_type: builtins.int,
     doc_tokens: builtins.int,
-    dim: builtins.int,
-) -> builtins.float: ...
-def maxsim_vrlen(
-    q: numpy.typing.NDArray[numpy.float32],
-    d: numpy.typing.NDArray[numpy.float32],
-    doc_lengths: typing.Sequence[builtins.int],
-    q_len: builtins.int,
-    dim: builtins.int,
+    batch_docs: builtins.int,
+    batch_tokens: builtins.int,
+    doc_lengths: typing.Optional[typing.Sequence[builtins.int]],
+    q_scale_ptr: builtins.int,
+    d_scale_ptr: builtins.int,
+    dtype: builtins.int,
+    jobs: builtins.int,
+) -> builtins.list[builtins.float]: ...
+@typing.overload
+def maxsim(
+    q: typing.Any,
+    d: typing.Any,
+    doc_lengths: typing.Optional[typing.Sequence[builtins.int]] = None,
+    q_scale: typing.Optional[typing.Any] = None,
+    d_scale: typing.Optional[typing.Any] = None,
+    q_len: typing.Optional[builtins.int] = None,
+    dim: typing.Optional[builtins.int] = None,
+    jobs: builtins.int = 1,
+    dtype: typing.Optional[builtins.int] = None,
+    **kwargs: typing.Any,
 ) -> builtins.list[builtins.float]: ...
 
 __version__ = "0.1.1-alpha"

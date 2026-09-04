@@ -1,22 +1,23 @@
 # MaxSim Benchmark Directory
 
-This directory contains benchmarking utilities to measure and validate performance across MaxSim implementations and Rust FFI endpoints:
+This directory contains benchmarking utilities to measure and validate performance across MaxSim implementations:
 
 ### Benchmarked Endpoints & Baselines:
-1. **`maxsimd.maxsim_vrlen`**: Custom SIMD AVX2/FMA + Rayon for variable-length (ragged) flat document buffers.
-2. **`maxsimd.maxsim_ptr`**: Direct PyTorch `tensor.data_ptr()` raw pointer passing for 2D tensors with zero PyO3 object overhead.
-3. **`maxsimd.maxsim_3d_ptr`**: Direct PyTorch `tensor.data_ptr()` raw pointer passing for 3D tensors `(batch, tokens, dim)` + Rayon multithreading.
-4. **`maxsimd.maxsim`**: Direct 3D NumPy array ingestion + Rayon multithreading.
-5. **`maxsim-cpu`**: Official [`maxsim-cpu`](https://pypi.org/project/maxsim-cpu/) PyPI library package (`maxsim_scores_variable` and `maxsim_scores`).
-6. **`PyTorch`**: PyTorch einsum & loop baselines.
-7. **`NumPy`**: Pure NumPy reference baseline.
+1. **`maxsimd.maxsim`**: Unified SIMD AVX2/FMA + Rayon multithreaded engine supporting 2D, 3D uniform batches, and ragged flat document buffers with zero-copy PyTorch/NumPy buffer ingestion.
+2. **`maxsim-cpu`**: Official [`maxsim-cpu`](https://pypi.org/project/maxsim-cpu/) PyPI library package (`maxsim_scores_variable` and `maxsim_scores`).
+3. **`PyTorch`**: PyTorch einsum & sequential loop baselines.
+4. **`NumPy`**: Pure NumPy reference baseline.
 
 ## Running the Benchmark
 
 From the root directory:
 
 ```bash
+# Run with default all cores (jobs=-1) across full document range
 python3 benchmarks/benchmark_maxsim.py
+
+# Specify concurrency and custom document counts
+python3 benchmarks/benchmark_maxsim.py --jobs 4 --docs 20 50 100 500
 ```
 
 ## Generated Artifacts

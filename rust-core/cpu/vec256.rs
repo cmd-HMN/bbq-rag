@@ -662,12 +662,12 @@ pub mod simd {
         d_scale: &[f32],
         q_len: usize,
         d_len: usize,
+        dim: usize,
     ) -> f32 {
-        if q_len == 0 || d_len == 0 {
+        if q_len == 0 || d_len == 0 || dim == 0 {
             return 0.0;
         }
 
-        let dim = q.len() / q_len;
         let num_blocks = dim / 32;
 
         let q_ptr = q.as_ptr();
@@ -783,10 +783,11 @@ pub mod simd {
         d_scale: &[f32],
         q_len: usize,
         d_len: usize,
+        dim: usize
     ) -> f32 {
         #[cfg(target_feature = "avx2")]
         {
-            unsafe { dotmaxg_i8(q, d, q_scale, d_scale, q_len, d_len) }
+            unsafe { dotmaxg_i8(q, d, q_scale, d_scale, q_len, d_len, dim) }
         }
         #[cfg(not(target_feature = "avx2"))]
         {

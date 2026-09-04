@@ -60,25 +60,25 @@ def test_config_gemini_settings_and_client():
 
 
 
-def test_maxsim_vrlen_functionality():
-    """Verify that maxsimd.maxsim_vrlen executes accurately."""
+def test_maxsim_ragged_flat_functionality():
+    """Verify that maxsimd.maxsim executes accurately on flat ragged buffers."""
     dim = 128
     q_len = 5
-    q_flat = np.random.randn(q_len * dim).astype(np.float32)
+    q_flat = np.random.randn(q_len, dim).astype(np.float32)
 
-    doc0 = np.random.randn(10 * dim).astype(np.float32)
-    doc1 = np.random.randn(15 * dim).astype(np.float32)
-    d_flat = np.concatenate([doc0, doc1])
+    doc0 = np.random.randn(10, dim).astype(np.float32)
+    doc1 = np.random.randn(15, dim).astype(np.float32)
+    d_flat = np.concatenate([doc0, doc1], axis=0)
     doc_lengths = [10, 15]
 
-    scores = maxsimd.maxsim_vrlen(q_flat, d_flat, doc_lengths, q_len, dim)
+    scores = maxsimd.maxsim(q_flat, d_flat, doc_lengths=doc_lengths)
     assert len(scores) == 2
     assert isinstance(scores[0], float)
     assert isinstance(scores[1], float)
 
 
 def test_maxsim_zero_copy_and_pointer():
-    """Verify maxsim 2D, 3D, and raw pointer functions."""
+    """Verify maxsim 2D, 3D, and raw pointer interfaces."""
     dim = 128
     q_len = 8
     q_mat = np.random.randn(q_len, dim).astype(np.float32)
@@ -91,10 +91,25 @@ def test_maxsim_zero_copy_and_pointer():
     assert len(s_2d) == 1
     assert len(s_3d) == 3
 
-    # Pointer calls
-    s_ptr = maxsimd.maxsim_ptr(q_mat.ctypes.data, d_2d.ctypes.data, q_len, 20, dim)
-    s_3d_ptr = maxsimd.maxsim_3d_ptr(q_mat.ctypes.data, d_3d.ctypes.data, q_len, 3, 20, dim)
-    assert np.isclose(s_2d[0], s_ptr)
+    # Pointer calls using unified maxsim
+    s_ptr = maxsimd.maxsim(
+        q_mat.ctypes.data,
+        d_2d.ctypes.data,
+        q_len=q_len,
+        dim=dim,
+        layout_type=0,
+        doc_tokens=20,
+    )
+    s_3d_ptr = maxsimd.maxsim(
+        q_mat.ctypes.data,
+        d_3d.ctypes.data,
+        q_len=q_len,
+        dim=dim,
+        layout_type=1,
+        batch_docs=3,
+        batch_tokens=20,
+    )
+    assert np.isclose(s_2d[0], s_ptr[0])
     assert np.allclose(s_3d, s_3d_ptr)
 
 
@@ -193,6 +208,52 @@ def test_gemini_client_and_fallback():
     assert client_invalid.is_available()
     answer_invalid = client_invalid.generate_answer("Test question", [img])
     assert answer_invalid is None
+
+
+def test_unified_maxsim_and_pointer_catching():
+    """Verify high-level maxsim with PyTorch, NumPy, and raw pointers."""
+    dim = 128
+    q_len = 6
+
+    # 1. PyTorch Tensors (Single 2D & Batch 3D)
+    q_torch = torch.randn(q_len, dim, dtype=torch.float32)
+    d_single_torch = torch.randn(12, dim, dtype=torch.float32)
+    d_batch_torch = torch.randn(4, 12, dim, dtype=torch.float32)
+
+    score_single = maxsimd.maxsim(q_torch, d_single_torch)
+    assert len(score_single) == 1
+
+    scores_batch = maxsimd.maxsim(q_torch, d_batch_torch, jobs=-1)
+    assert len(scores_batch) == 4
+
+    scores_batch_seq = maxsimd.maxsim(q_torch, d_batch_torch, jobs=1)
+    assert np.allclose(scores_batch, scores_batch_seq)
+
+    # 2. NumPy Arrays (Ragged flat buffer)
+    q_np = np.random.randn(q_len, dim).astype(np.float32)
+    doc_lengths = [10, 15, 20]
+    total_tokens = sum(doc_lengths)
+    d_flat_np = np.random.randn(total_tokens, dim).astype(np.float32)
+
+    scores_flat = maxsimd.maxsim(q_np, d_flat_np, doc_lengths=doc_lengths, jobs=-1)
+    assert len(scores_flat) == 3
+
+    scores_flat_seq = maxsimd.maxsim(q_np, d_flat_np, doc_lengths=doc_lengths, jobs=1)
+    assert np.allclose(scores_flat, scores_flat_seq)
+
+    # 3. Raw Pointer Interface using maxsim
+    scores_raw = maxsimd.maxsim(
+        q_torch.data_ptr(),
+        d_batch_torch.data_ptr(),
+        q_len=q_len,
+        dim=dim,
+        layout_type=1,
+        batch_docs=4,
+        batch_tokens=12,
+        jobs=-1,
+    )
+    assert np.allclose(scores_raw, scores_batch)
+
 
 
 

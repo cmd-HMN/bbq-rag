@@ -1,6 +1,7 @@
 /// FOR CPU
 use maxsimd::cpu::{
-  dotmax128_f32, dotmaxg_f32, dotmaxtg_f32, dotmaxg_i8, ref_maxsim_f32, ref_maxsimd128_f32, ref_maxsim_i8
+  dotmax128_f32, dotmaxg_f32, dotmaxtg_f32, dotmaxg_i8, ref_maxsim_f32, ref_maxsimd128_f32, ref_maxsim_i8,
+  dm_f32, dm_i8
 };
 
 use rand::random_range;
@@ -150,7 +151,7 @@ fn test_i8_simd_standard_batch() {
     let ds: Vec<f32> = (0..d_len * num_blocks).map(|i| 0.01 + ((i % 7) as f32) * 0.003).collect();
 
     let expected = ref_maxsim_i8(&q, &d, &qs, &ds, q_len, d_len, dim);
-    let got = unsafe { dotmaxg_i8(&q, &d, &qs, &ds, q_len, d_len) };
+    let got = unsafe { dotmaxg_i8(&q, &d, &qs, &ds, q_len, d_len, dim) };
 
     assert_approx_eq("i8_standard_batch", got, expected);
 }
@@ -168,7 +169,7 @@ fn test_i8_simd_leftovers() {
     let ds: Vec<f32> = (0..d_len * num_blocks).map(|i| 0.005 + ((i % 6) as f32) * 0.001).collect();
 
     let expected = ref_maxsim_i8(&q, &d, &qs, &ds, q_len, d_len, dim);
-    let got = unsafe { dotmaxg_i8(&q, &d, &qs, &ds, q_len, d_len) };
+    let got = unsafe { dotmaxg_i8(&q, &d, &qs, &ds, q_len, d_len, dim) };
 
     assert_approx_eq("i8_leftovers", got, expected);
 }
@@ -179,8 +180,76 @@ fn test_i8_simd_empty() {
     let qs: Vec<f32> = vec![];
     let ds: Vec<f32> = vec![];
 
-    let got = unsafe { dotmaxg_i8(&q, &d, &qs, &ds, 0, 0) };
+    let got = unsafe { dotmaxg_i8(&q, &d, &qs, &ds, 0, 0, 128) };
     assert_eq!(got, 0.0);
+}
+
+fn test_f32_i8_rand() {
+    let dim = 128;
+    let num_blocks = dim / 32;
+
+    for loop_idx in 0..100 {
+        let q_len = random_range(1..=16);
+        let d_len = random_range(1..=32);
+
+        let q_i8: Vec<i8> = (0..q_len * dim)
+            .map(|_| random_range(-128..=127) as i8)
+            .collect();
+        let d_i8: Vec<i8> = (0..d_len * dim)
+            .map(|_| random_range(-128..=127) as i8)
+            .collect();
+
+        let q_scales: Vec<f32> = (0..q_len * num_blocks)
+            .map(|_| random_range(0.001..=0.05))
+            .collect();
+        let d_scales: Vec<f32> = (0..d_len * num_blocks)
+            .map(|_| random_range(0.001..=0.05))
+            .collect();
+
+        let mut q_f32 = Vec::with_capacity(q_len * dim);
+        for qi in 0..q_len {
+            for bi in 0..num_blocks {
+                let scale = q_scales[qi * num_blocks + bi];
+                for elem in 0..32 {
+                    let val = q_i8[qi * dim + bi * 32 + elem] as f32;
+                    q_f32.push(val * scale);
+                }
+            }
+        }
+
+        let mut d_f32 = Vec::with_capacity(d_len * dim);
+        for di in 0..d_len {
+            for bi in 0..num_blocks {
+                let scale = d_scales[di * num_blocks + bi];
+                for elem in 0..32 {
+                    let val = d_i8[di * dim + bi * 32 + elem] as f32;
+                    d_f32.push(val * scale);
+                }
+            }
+        }
+
+        let f32_score = dm_f32(&q_f32, &d_f32, q_len, d_len, dim);
+        let i8_score = dm_i8(&q_i8, &d_i8, &q_scales, &d_scales, q_len, d_len, dim);
+        let i8_ref = ref_maxsim_i8(&q_i8, &d_i8, &q_scales, &d_scales, q_len, d_len, dim);
+
+        assert!(
+            (i8_score - i8_ref).abs() <= 1e-4 * i8_ref.abs().max(1.0) + 1e-3,
+            "Loop {}: i8 SIMD ({}) and ref ({}) mismatch",
+            loop_idx,
+            i8_score,
+            i8_ref
+        );
+
+        let sub_diff = (f32_score - i8_score).abs();
+        assert!(
+            sub_diff <= 1e-2 * f32_score.abs().max(1.0) + 0.05,
+            "Loop {}: (f32 - i8) sub diff exceeded tolerance: {} (f32: {}, i8: {})",
+            loop_idx,
+            sub_diff,
+            f32_score,
+            i8_score
+        );
+    }
 }
 
 test_me! {
@@ -193,5 +262,6 @@ test_me! {
         i8_standard:            test_i8_simd_standard_batch,
         i8_leftovers:           test_i8_simd_leftovers,
         i8_empty:               test_i8_simd_empty,
+        f32_i8_rand:            test_f32_i8_rand,
     }
 }
