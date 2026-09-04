@@ -32,8 +32,6 @@ criterion = "0.8.2"
 approx = "0.5"
 rand = "0.10.2"
 
-[build]
-jobs = 4
 
 [[bin]]
 name = "stub"
