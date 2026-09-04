@@ -5,7 +5,7 @@ pub mod function {
         dm_f32, dm_i8
     };
 
-    use crate::quantization::{QParmas, QTYPE};
+    use crate::quantization::{QParmas, QTYPE, qf32_i8_d128};
     use rayon::prelude::{IntoParallelIterator, ParallelIterator};
 
     #[derive(Debug, Clone)]
@@ -281,6 +281,64 @@ pub mod function {
                     dtype,
                 )
             }
+        }
+    }
+
+    pub unsafe fn qi8(
+        ptr: usize,
+        tokens: usize,
+        dim: usize,
+        out_ptr: usize,
+        scale_ptr: usize,
+        jobs: i32,
+    ) -> Result<(Vec<i8>, Vec<f32>), String> {
+        if dim != 128 {
+            return Err("Currently qi8 only supports dim=128 vectors".to_string());
+        }
+
+        let num_blocks = dim / QParmas::BLOCK;
+
+        if out_ptr != 0 && scale_ptr != 0 {
+            let src_addr = ptr;
+            let dst_data_addr = out_ptr;
+            let dst_scale_addr = scale_ptr;
+
+            let _ = execute_jobs(0..tokens, jobs, move |t| {
+                unsafe {
+                    let slice = std::slice::from_raw_parts((src_addr as *const f32).add(t * 128), 128);
+                    let qb = qf32_i8_d128(slice);
+                    if let Ok((val, scale)) = qb.to_array::<i8>() {
+                        let dst_d = (dst_data_addr as *mut i8).add(t * 128);
+                        let dst_s = (dst_scale_addr as *mut f32).add(t * 4);
+                        std::ptr::copy_nonoverlapping(val.as_ptr(), dst_d, 128);
+                        std::ptr::copy_nonoverlapping(scale.as_ptr(), dst_s, 4);
+                    }
+                }
+            });
+
+            Ok((Vec::new(), Vec::new()))
+        } else {
+            let mut out_data = vec![0i8; tokens * dim];
+            let mut out_scales = vec![0.0f32; tokens * num_blocks];
+
+            let src_addr = ptr;
+            let dst_data_addr = out_data.as_mut_ptr() as usize;
+            let dst_scale_addr = out_scales.as_mut_ptr() as usize;
+
+            let _ = execute_jobs(0..tokens, jobs, move |t| {
+                unsafe {
+                    let slice = std::slice::from_raw_parts((src_addr as *const f32).add(t * 128), 128);
+                    let qb = qf32_i8_d128(slice);
+                    if let Ok((val, scale)) = qb.to_array::<i8>() {
+                        let dst_d = (dst_data_addr as *mut i8).add(t * 128);
+                        let dst_s = (dst_scale_addr as *mut f32).add(t * 4);
+                        std::ptr::copy_nonoverlapping(val.as_ptr(), dst_d, 128);
+                        std::ptr::copy_nonoverlapping(scale.as_ptr(), dst_s, 4);
+                    }
+                }
+            });
+
+            Ok((out_data, out_scales))
         }
     }
 }

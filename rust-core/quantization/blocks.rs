@@ -88,12 +88,88 @@ impl QBlock {
     pub fn get_dim(&self) -> usize {
         QParmas::BASE_DIMS
     }
+
+    // so that we can convert QData to ([T; QParmas::BASE_DIMS], [f32; QParmas::BLOCK_SIZE])
+    pub fn to_array<T>(&self) -> Result<([T; QParmas::BASE_DIMS], [f32; QParmas::BLOCK_SIZE]), &'static str>
+    where
+        ([T; QParmas::BASE_DIMS], [f32; QParmas::BLOCK_SIZE]): TryFrom<QData, Error = &'static str>,
+    {
+        self.qdata.try_into()
+    }
+
     // so that we can convert QData to [T; QParmas::BASE_DIMS]
-    pub fn to_array<T>(&self) -> Result<[T; QParmas::BASE_DIMS], &'static str>
+    pub fn to_values<T>(&self) -> Result<[T; QParmas::BASE_DIMS], &'static str>
     where
         [T; QParmas::BASE_DIMS]: TryFrom<QData, Error = &'static str>,
     {
         self.qdata.try_into()
+    }
+}
+
+// for type i8 with scale
+impl TryFrom<QData> for ([i8; QParmas::BASE_DIMS], [f32; QParmas::BLOCK_SIZE]) {
+    type Error = &'static str;
+
+    fn try_from(qdata: QData) -> Result<Self, Self::Error> {
+        match qdata {
+            QData::Int8(blocks) => {
+                let mut out_data = [0i8; QParmas::BASE_DIMS];
+                let mut out_scale = [0f32; QParmas::BLOCK_SIZE];
+
+                for (i, blk) in blocks.iter().enumerate() {
+                    let start = i * QParmas::BLOCK;
+                    out_data[start..start + QParmas::BLOCK].copy_from_slice(&blk.data);
+                    out_scale[i] = blk.scale;
+                }
+
+                Ok((out_data, out_scale))
+            }
+            _ => Err("You are initializing with wrong datatype, its not Int8"),
+        }
+    }
+}
+
+// for type f32 with scale
+impl TryFrom<QData> for ([f32; QParmas::BASE_DIMS], [f32; QParmas::BLOCK_SIZE]) {
+    type Error = &'static str;
+
+    fn try_from(qdata: QData) -> Result<Self, Self::Error> {
+        match qdata {
+            QData::Float32(blocks) => {
+                let mut out_data = [0f32; QParmas::BASE_DIMS];
+                let out_scale = [1.0f32; QParmas::BLOCK_SIZE];
+
+                for (i, blk) in blocks.iter().enumerate() {
+                    let start = i * QParmas::BLOCK;
+                    out_data[start..start + QParmas::BLOCK].copy_from_slice(&blk.data);
+                }
+
+                Ok((out_data, out_scale))
+            }
+            _ => Err("You are initializing with wrong datatype, its not Float32"),
+        }
+    }
+}
+
+// for type u8 with scale
+impl TryFrom<QData> for ([u8; QParmas::BASE_DIMS], [f32; QParmas::BLOCK_SIZE]) {
+    type Error = &'static str;
+
+    fn try_from(qdata: QData) -> Result<Self, Self::Error> {
+        match qdata {
+            QData::Binary(blocks) => {
+                let mut out_data = [0u8; QParmas::BASE_DIMS];
+                let out_scale = [1.0f32; QParmas::BLOCK_SIZE];
+
+                for (i, blk) in blocks.iter().enumerate() {
+                    let start = i * QParmas::BLOCK;
+                    out_data[start..start + QParmas::BLOCK].copy_from_slice(&blk.data);
+                }
+
+                Ok((out_data, out_scale))
+            }
+            _ => Err("You are initializing with wrong datatype, its not Binary"),
+        }
     }
 }
 
@@ -102,7 +178,6 @@ impl TryFrom<QData> for [f32; QParmas::BASE_DIMS] {
     type Error = &'static str;
 
     fn try_from(qdata: QData) -> Result<Self, Self::Error> {
-        
         match qdata {
             QData::Float32(blocks) => {
                 let mut out = [0f32; QParmas::BASE_DIMS];
@@ -122,19 +197,17 @@ impl TryFrom<QData> for [f32; QParmas::BASE_DIMS] {
 // for type i8
 impl TryFrom<QData> for [i8; QParmas::BASE_DIMS] {
     type Error = &'static str;
-    
+
     fn try_from(qdata: QData) -> Result<Self, Self::Error> {
-        
         match qdata {
-            
             QData::Int8(blocks) => {
                 let mut out = [0i8; QParmas::BASE_DIMS];
-            
+
                 for (i, blk) in blocks.iter().enumerate() {
                     let start = i * QParmas::BLOCK;
                     out[start..start + QParmas::BLOCK].copy_from_slice(&blk.data);
                 }
-                
+
                 Ok(out)
             }
             _ => Err("You are initializing with wrong datatype, its not Int8"),
@@ -143,20 +216,18 @@ impl TryFrom<QData> for [i8; QParmas::BASE_DIMS] {
 }
 
 impl TryFrom<QData> for [u8; QParmas::BASE_DIMS] {
-    
     type Error = &'static str;
 
     fn try_from(qdata: QData) -> Result<Self, Self::Error> {
-    
         match qdata {
             QData::Binary(blocks) => {
                 let mut out = [0u8; QParmas::BASE_DIMS];
-                
+
                 for (i, blk) in blocks.iter().enumerate() {
                     let start = i * QParmas::BLOCK;
                     out[start..start + QParmas::BLOCK].copy_from_slice(&blk.data);
                 }
-                
+
                 Ok(out)
             }
             _ => Err("You are initializing with wrong datatype, its not Binary"),

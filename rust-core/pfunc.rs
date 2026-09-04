@@ -2,7 +2,7 @@
 use pyo3::prelude::*;
 use pyo3_stub_gen::derive::gen_stub_pyfunction;
 
-use crate::ops::{DocLayout, maxsim as ms};
+use crate::ops::{DocLayout};
 use crate::quantization::QTYPE;
 
 #[pyfunction]
@@ -67,7 +67,7 @@ unsafe fn maxsim(
 
     Ok(unsafe {
         // caller maxsim funciton
-        ms(
+        crate::ops::maxsim(
             q_ptr,
             d_ptr,
             q_len,
@@ -81,10 +81,30 @@ unsafe fn maxsim(
     })
 }
 
+
+#[pyfunction]
+#[gen_stub_pyfunction]
+#[pyo3(signature = (ptr, tokens, dim=128, out_ptr=0, scale_ptr=0, jobs=-1))]
+unsafe fn qi8(
+    ptr: usize,
+    tokens: usize,
+    dim: usize,
+    out_ptr: usize,
+    scale_ptr: usize,
+    jobs: i32,
+) -> PyResult<(Vec<i8>, Vec<f32>)> {
+    unsafe {
+        crate::ops::qi8(ptr, tokens, dim, out_ptr, scale_ptr, jobs)
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e))
+    }
+}
+
 #[pymodule]
 fn maxsimd(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
 
     m.add_function(wrap_pyfunction!(maxsim, m)?)?;
+    m.add_function(wrap_pyfunction!(qi8, m)?)?;
+
     Ok(())
 }

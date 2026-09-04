@@ -255,5 +255,59 @@ def test_unified_maxsim_and_pointer_catching():
     assert np.allclose(scores_raw, scores_batch)
 
 
+def test_quantization_qi8_and_quantized_maxsim():
+    """Verify maxsimd.quantization.qi8 with PyTorch and NumPy, passed to maxsim."""
+    from maxsimd.quantization import qi8
+
+    dim = 128
+    q_len = 8
+
+    # 1. PyTorch quantization
+    q_torch = torch.randn(q_len, dim, dtype=torch.float32)
+    d_torch = torch.randn(4, 16, dim, dtype=torch.float32)
+
+    q_val, q_scale = qi8(q_torch)
+    d_val, d_scale = qi8(d_torch)
+
+    assert q_val.shape == (q_len, dim)
+    assert q_val.dtype == torch.int8
+    assert q_scale.shape == (q_len, dim // 32)
+    assert q_scale.dtype == torch.float32
+
+    assert d_val.shape == (4, 16, dim)
+    assert d_val.dtype == torch.int8
+    assert d_scale.shape == (4, 16, dim // 32)
+    assert d_scale.dtype == torch.float32
+
+    # Call maxsim with quantized tensors
+    scores_torch = maxsimd.maxsim(q_val, d_val, q_scale=q_scale, d_scale=d_scale, jobs=-1)
+    assert len(scores_torch) == 4
+    for s in scores_torch:
+        assert isinstance(s, float)
+        assert np.isfinite(s)
+
+    # 2. NumPy quantization
+    q_np = np.random.randn(q_len, dim).astype(np.float32)
+    d_np = np.random.randn(20, dim).astype(np.float32)
+
+    q_np_val, q_np_scale = qi8(q_np)
+    d_np_val, d_np_scale = qi8(d_np)
+
+    assert q_np_val.shape == (q_len, dim)
+    assert q_np_val.dtype == np.int8
+    assert q_np_scale.shape == (q_len, dim // 32)
+    assert q_np_scale.dtype == np.float32
+
+    assert d_np_val.shape == (20, dim)
+    assert d_np_val.dtype == np.int8
+    assert d_np_scale.shape == (20, dim // 32)
+    assert d_np_scale.dtype == np.float32
+
+    scores_np = maxsimd.maxsim(q_np_val, d_np_val, q_scale=q_np_scale, d_scale=d_np_scale)
+    assert len(scores_np) == 1
+    assert isinstance(scores_np[0], float)
+    assert np.isfinite(scores_np[0])
+
+
 
 

@@ -162,7 +162,7 @@ pub mod qnt {
     }
 
     #[inline(always)]
-    pub fn qf32_i8_d128_to_array(src: &[f32; QParmas::BASE_DIMS]) -> [i8; QParmas::BASE_DIMS] {
-            qf32_i8_d128(src).to_array().unwrap()
+    pub fn qf32_i8_d128_to_array(src: &[f32; QParmas::BASE_DIMS]) -> ([i8; QParmas::BASE_DIMS], [f32; QParmas::BLOCK_SIZE]) {
+        qf32_i8_d128(src).to_array().unwrap()
     }
 }

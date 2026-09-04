@@ -3,18 +3,18 @@ import numpy as np
 
 try:
     import torch
-
-    _HAS_TORCH = True
 except ImportError:
-    _HAS_TORCH = False
+    torch = None  # type: ignore
 
 from .maxsimd import (
     maxsim as _raw_maxsim,
     __version__,
 )
+from . import quantization
 
 __all__ = [
     "maxsim",
+    "quantization",
     "__version__",
 ]
 
@@ -25,23 +25,25 @@ def _extract_ptr_shape_dtype(obj):
     if isinstance(obj, int):
         return obj, None, None
 
-    if _HAS_TORCH and isinstance(obj, torch.Tensor):
+    if torch is not None and isinstance(obj, torch.Tensor):
         if not obj.is_contiguous():
             obj = obj.contiguous()
         dt = 0 if obj.dtype == torch.float32 else (1 if obj.dtype == torch.int8 else -1)
-        return obj.data_ptr(), obj.shape, dt
+        return obj.data_ptr(), tuple(obj.shape), dt
 
     if isinstance(obj, np.ndarray):
         if not obj.flags["C_CONTIGUOUS"]:
             obj = np.ascontiguousarray(obj)
         dt = 0 if obj.dtype == np.float32 else (1 if obj.dtype == np.int8 else -1)
-        return obj.ctypes.data, obj.shape, dt
+        return obj.ctypes.data, tuple(obj.shape), dt
 
     if hasattr(obj, "data_ptr"):
-        return obj.data_ptr(), getattr(obj, "shape", None), 0
+        s = getattr(obj, "shape", None)
+        return obj.data_ptr(), tuple(s) if s is not None else None, 0
 
     if hasattr(obj, "ctypes"):
-        return obj.ctypes.data, getattr(obj, "shape", None), 0
+        s = getattr(obj, "shape", None)
+        return obj.ctypes.data, tuple(s) if s is not None else None, 0
 
     raise TypeError(
         f"Unsupported buffer type: {type(obj)}. Expected torch.Tensor, np.ndarray, or raw pointer int."
@@ -138,7 +140,7 @@ def maxsim(
                 layout_type = 1
             else:
                 layout_type = 0
-                if doc_tokens == 0 and d_shape is not None:
+                if doc_tokens == 0 and d_shape is not None and len(d_shape) > 0:
                     doc_tokens = d_shape[0]
 
         return _raw_maxsim(

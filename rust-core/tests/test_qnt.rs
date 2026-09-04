@@ -10,7 +10,7 @@ fn ht_q128x32_i8(value: &[f32; 128]) {
     sq128x32_sq8(value, &mut sdst);
 
     let qblock = qf32_i8_d128(value);
-    let qdst: [i8; QParmas::BASE_DIMS] = qblock.to_array().unwrap();
+    let (qdst, _): ([i8; QParmas::BASE_DIMS], [f32; QParmas::BLOCK_SIZE]) = qblock.to_array().unwrap();
 
     for i in 0..QParmas::BASE_DIMS {
         assert_eq!(
@@ -42,7 +42,7 @@ fn test_qf32_to_qi8_d128_type_mismatch_error() {
 
     // SHOULD PANIC
     // Asking to a big heart
-    let _: [f32; QParmas::BASE_DIMS] = qblock.to_array().unwrap();
+    let _: ([f32; QParmas::BASE_DIMS], [f32; QParmas::BLOCK_SIZE]) = qblock.to_array().unwrap();
 
     // // println!("res: {}", res.is_err());
     // // Damn stone heart
@@ -71,6 +71,13 @@ fn test_qf32_to_qi8_d128_independent_block_scales() {
     for i in 96..128 {
         input[i] = -0.01;
     }
+
+    let qblock = qf32_i8_d128(&input);
+    let (_data, scales): ([i8; QParmas::BASE_DIMS], [f32; QParmas::BLOCK_SIZE]) = qblock.to_array().unwrap();
+    assert!((scales[0] - 100.0 / 127.0).abs() < 1e-5);
+    assert!((scales[1] - 0.01 / 127.0).abs() < 1e-5);
+    assert_eq!(scales[2], 0.0);
+    assert!((scales[3] - 0.01 / 127.0).abs() < 1e-5);
 
     ht_q128x32_i8(&input);
 }

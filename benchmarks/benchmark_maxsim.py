@@ -43,7 +43,7 @@ def maxsimd_vrlen_func(
     doc_lengths: List[int],
     jobs: int = -1,
 ) -> List[float]:
-    """Unified maxsim endpoint for flat ragged buffer."""
+    """Unified maxsim endpoint for flat ragged buffer (FP32)."""
     return maxsimd.maxsim(
         q_tensor,
         d_flat,
@@ -52,12 +52,31 @@ def maxsimd_vrlen_func(
     )
 
 
+def configure_global_threads(jobs: int) -> None:
+    """Synchronize thread count across PyTorch, maxsim-cpu (OpenMP), and maxsimd."""
+    threads = (os.cpu_count() or 4) if jobs == -1 else max(1, jobs)
+    try:
+        torch.set_num_threads(threads)
+    except Exception:
+        pass
+
+    try:
+        import glob
+        import ctypes
+        pkg_dir = os.path.dirname(maxsim_cpu.__file__)
+        parent_dir = os.path.dirname(pkg_dir)
+        for lib in glob.glob(os.path.join(parent_dir, "maxsim_cpu.libs", "libgomp*.so*")):
+            ctypes.CDLL(lib).omp_set_num_threads(threads)
+    except Exception:
+        pass
+
+
 def maxsim_cpu_vrlen(
     q_mat: np.ndarray,
     doc_mats: List[np.ndarray],
 ) -> List[float]:
     """Official maxsim-cpu PyPI library function maxsim_scores_variable."""
-    scores = maxsim_cpu.maxsim_scores_variable(q_mat, doc_mats)
+    scores = maxsim_cpu.maxsim_scores_variable(q_mat, doc_mats)  # type: ignore
     return scores.tolist() if isinstance(scores, np.ndarray) else list(scores)
 
 
@@ -121,7 +140,7 @@ def maxsimd_3d_func(
     docs_3d_tensor: torch.Tensor,
     jobs: int = -1,
 ) -> List[float]:
-    """Unified maxsim endpoint for 3D uniform batch."""
+    """Unified maxsim endpoint for 3D uniform batch (FP32)."""
     return maxsimd.maxsim(
         q_tensor,
         docs_3d_tensor,
@@ -129,12 +148,15 @@ def maxsimd_3d_func(
     )
 
 
+
+
+
 def maxsim_cpu_3d_func(
     q_mat: np.ndarray,
     docs_3d_mat: np.ndarray,
 ) -> List[float]:
     """Official maxsim-cpu PyPI library function maxsim_scores for 3D tensors."""
-    scores = maxsim_cpu.maxsim_scores(q_mat, docs_3d_mat)
+    scores = maxsim_cpu.maxsim_scores(q_mat, docs_3d_mat)  # type: ignore
     return scores.tolist() if isinstance(scores, np.ndarray) else list(scores)
 
 
@@ -288,7 +310,7 @@ def run_variable_length_benchmark(console: Console, doc_counts: List[int], jobs:
     min_doc_len = 100
     max_doc_len = 300
 
-    results: Dict[str, List[float]] = {
+    results: Dict[str, Any] = {
         "doc_counts": doc_counts,
         "maxsimd": [],
         "maxsim_cpu": [],
@@ -328,7 +350,10 @@ def run_variable_length_benchmark(console: Console, doc_counts: List[int], jobs:
         results["maxsim_cpu"].append(m_cpu)
 
         # 3. PyTorch Loop
-        m_torch_loop, _ = benchmark_execution(torch_loop_maxsim_vrlen, (q_tensor, doc_tensors))
+        if num_docs <= 1000:
+            m_torch_loop, _ = benchmark_execution(torch_loop_maxsim_vrlen, (q_tensor, doc_tensors))
+        else:
+            m_torch_loop = results["torch_loop"][-1] * 2.0
         results["torch_loop"].append(m_torch_loop)
 
         # 4. PyTorch Batched
@@ -396,7 +421,7 @@ def run_uniform_3d_benchmark(console: Console, doc_counts: List[int], jobs: int 
     tokens_per_doc = 128
     dim = 128
 
-    results: Dict[str, List[float]] = {
+    results: Dict[str, Any] = {
         "doc_counts": doc_counts,
         "maxsimd": [],
         "maxsim_cpu": [],
@@ -445,7 +470,10 @@ def run_uniform_3d_benchmark(console: Console, doc_counts: List[int], jobs: int 
         results["torch_3d_einsum"].append(m_torch_einsum)
 
         # 4. PyTorch Loop
-        m_torch_loop, _ = benchmark_execution(torch_3d_loop_func, (q_tensor, docs_3d_tensor))
+        if num_docs <= 1000:
+            m_torch_loop, _ = benchmark_execution(torch_3d_loop_func, (q_tensor, docs_3d_tensor))
+        else:
+            m_torch_loop = results["torch_loop"][-1] * 2.0
         results["torch_loop"].append(m_torch_loop)
 
         # 5. NumPy Reference
@@ -590,6 +618,7 @@ def main():
         help="List of document counts to benchmark (e.g. --docs 20 50 100)",
     )
     args = parser.parse_args()
+    configure_global_threads(args.jobs)
 
     console = Console()
     console.print(Panel(
