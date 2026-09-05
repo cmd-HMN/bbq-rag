@@ -24,4 +24,4 @@ def maxsim(
     **kwargs: typing.Any,
 ) -> builtins.list[builtins.float]: ...
 
-__version__ = "0.1.1-alpha"
+__version__ = "0.1.2-alpha"
