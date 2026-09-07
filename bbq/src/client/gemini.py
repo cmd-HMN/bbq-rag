@@ -26,7 +26,7 @@ class GeminiClient:
         self,
         api_key: Optional[str] = None,
         model: str = DEFAULT_GEMINI_MODEL,
-        timeout: int = 30,
+        timeout: int = 90,
     ) -> None:
         self.api_key: Optional[str] = (
             api_key

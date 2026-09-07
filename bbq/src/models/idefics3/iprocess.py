@@ -3,7 +3,7 @@ import torch
 from PIL import Image
 from transformers import BatchEncoding, BatchFeature, Idefics3Processor
 from transformers import logging as tf_logging
-from maxsimd import maxsim_3d_ptr
+from maxsimd import maxsim
 from bbq.src.common.base import BaseProcessor
 
 tf_logging.set_verbosity_warning()
@@ -123,7 +123,7 @@ class CIdeficsProcessor(Idefics3Processor, BaseProcessor):
         """
         Maxsim score between qs and ps
 
-        Uses maxsim_3d_ptr for zero-copy memory pointer MaxSim scoring.
+        Uses maxsim for zero-copy multi-core SIMD MaxSim scoring.
 
         Args:
             qs (Union[torch.Tensor, List[torch.Tensor]]): The queries
@@ -153,21 +153,11 @@ class CIdeficsProcessor(Idefics3Processor, BaseProcessor):
         else:
             raise ValueError(f"Unsupported passages type: {type(ps)}")
 
-        num_docs, tokens_per_doc, dim = ps_tensor.shape
         scores_list: List[List[float]] = []
 
         for q in qs_list:
             q_cont = q.contiguous().float().cpu()
-            q_len = q_cont.shape[0]
-
-            scores: List[float] = maxsim_3d_ptr(
-                q_cont.data_ptr(),
-                ps_tensor.data_ptr(),
-                q_len,
-                num_docs,
-                tokens_per_doc,
-                dim,
-            )
+            scores: List[float] = maxsim(q_cont, ps_tensor, jobs=-1)
             scores_list.append(scores)
 
         return torch.tensor(scores_list, dtype=torch.float32)
