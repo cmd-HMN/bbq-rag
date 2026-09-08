@@ -1,20 +1,5 @@
 """
-Rigorous Benchmark Suite comparing MaxSim implementations with Matplotlib Plotting:
- 1. Variable-Length (Ragged) Documents:
-    - maxsimd.maxsim (jobs={jobs})
-    - maxsim-cpu (Official PyPI package by Mixedbread AI)
-    - PyTorch (Batched & Masked einsum)
-    - PyTorch (Sequential loop)
-    - NumPy (Reference)
-
- 2. Dense Uniform 3D Documents (ColPali / Multi-Page Batches):
-    - maxsimd.maxsim (jobs={jobs})
-    - maxsim-cpu (PyPI maxsim_scores)
-    - PyTorch (Dense 3D einsum)
-    - PyTorch (Sequential loop)
-    - NumPy (Reference)
-
-Saves comparison graphs to root assets/ directory.
+Becnhmark is saved in the assets folder
 """
 
 import os
