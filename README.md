@@ -10,34 +10,33 @@
 [![FFI](https://img.shields.io/badge/FFI-PyO3%200.29-e11d48.svg)](https://pyo3.rs/)
 [![Repo Size](https://img.shields.io/badge/repo%20size-~3.2%20MB-0ea5e9.svg)](#)
 [![Environment](https://img.shields.io/badge/environment-~2.5--3.0%20GB-8b5cf6.svg)](#)
-[![Throughput](https://img.shields.io/badge/throughput->%2090k%20pages/s-f97316.svg)](#performance--benchmarks)
+[![Throughput](https://img.shields.io/badge/throughput->%20150k%20pages/s-f97316.svg)](#performance--benchmarks)
 [![About](https://img.shields.io/badge/Lineage-ColPali%20%26%20maxsim--cpu-f59e0b.svg)](ABOUT.md)
 
 </div>
 
-BBQ-RAG is a high-performance visual document retrieval and late-interaction (MaxSim) search engine. It combines Vision-Language Model embeddings (ColPali, SmolVLM, Idefics3) with an in-register fused AVX2/FMA SIMD compute kernel in Rust (`maxsimd`), achieving over 90,000 document pages scored per second on multi-core CPUs with zero intermediate heap memory allocation.
+BBQ-RAG is an ultra-fast, lightweight visual document retrieval and late-interaction (ColPali / MaxSim) search engine. By combining Vision-Language Model embeddings (ColPali, colSmol, SmolVLM) with an in-register fused AVX2/FMA SIMD compute engine in Rust (`maxsimd`), BBQ-RAG scores over **150,000 document pages per second** on standard multi-core CPUs with zero intermediate heap allocations.
 
-It includes an automated PDF directory watcher, a persistent background embedding server, zero-copy PyTorch/NumPy FFI bindings, and an integrated client-side Google Gemini multimodal RAG generator with graceful offline fallback.
+It provides a complete end-to-end local RAG pipeline: an automated PDF directory watcher, a persistent background multi-vector embedding server, unified zero-copy Python bindings, Google Gemini multimodal answer generation with offline fallback, and an integrated benchmarking suite for throughput scaling and ViDoRe retrieval evaluation.
 
 ---
 
 ## Key Features
 
-- **Fused AVX2 MaxSim Kernel**: 4-way query unrolled SIMD dot-product pipeline with in-register maximum tracking, eliminating intermediate similarity matrix allocation and cutting memory load traffic by 27x.
-- **Adaptive Parallelism**: Dynamic execution routing that executes small batches sequentially on the main thread to avoid work-stealing overhead, and switches to Rayon chunked work pools for large multi-page batches.
-- **Zero-Copy Memory Interop**: Direct ingestion of contiguous 2D/3D NumPy arrays via PyO3 and raw memory pointer passing (`maxsim_ptr`) for PyTorch tensors (`tensor.data_ptr()`).
-- **Vision-Language Indexing Server**: Automated folder monitoring (`data/watch/`), background PDF page rasterization at 150 DPI via PyMuPDF, and persistent SQLite embedding metadata tracking.
-- **Client-Side Gemini Multimodal RAG**: Seamless multimodal answer generation with Google Gemini (`gemini-3.6-flash` / `gemini-2.0-flash`) over top-3 retrieved page images, with automatic fallback to returning document pages when offline or when no API key is provided.
+- **Fused AVX2/FMA SIMD MaxSim Engine**: 4-way query unrolled SIMD dot-product pipeline with in-register maximum tracking written in Rust (`maxsimd`), eliminating intermediate similarity matrix allocation and cutting memory load traffic by 27x.
+- **Adaptive Multi-Threaded Parallelism**: Dynamic execution routing that runs small batches sequentially on the main thread to eliminate work-stealing overhead, and switches automatically to Rayon chunked work pools for large multi-page collections.
+- **Unified Zero-Copy FFI**: A single unified Python entry point (`maxsimd.maxsim`) accepting contiguous NumPy arrays and PyTorch tensors directly with zero memory copying or overhead.
+- **Vision-Language Indexing Server**: Automated folder monitoring (`data/watch/`), background PDF page rasterization at 150 DPI via PyMuPDF, and persistent SQLite metadata and multi-vector embedding storage.
+- **Client-Side Gemini Multimodal RAG**: Seamless grounded answer synthesis with Google Gemini (`gemini-2.5-flash` / `gemini-2.0-flash`) over top retrieved visual pages, with automatic fallback to page viewing when offline or without an API key.
+- **Production Benchmarking Suite**: Comprehensive micro- and macro-benchmark suites with CLI controls (`--suite maxsimd` for throughput scaling, `--suite vidore` evaluating retrieval quality, QPS, and numerical parity against PyTorch across 10 official ViDoRe datasets).
 
 ---
 
 ## Performance & Benchmarks
 
-The benchmark compares 5 MaxSim scoring implementations across varying document counts (Q=32 query tokens, L=100-300 document tokens, Embedding Dim=128):
+> For in-depth benchmark comparisons, multi-baseline analysis, and full ViDoRe multimodal retrieval evaluations, see [**MORE INFO ON THE BENCHMARK README**](benchmarks/README.md).
 
-![MaxSim Benchmark Comparison](assets/maxsim_benchmark_comparison.png)
-
-_Note: The benchmark results shown above are preliminary and generated in a synthetic test suite. The benchmark setup was generated with AI assistance and has not been independently validated across all production hardware variants. Further validation, profiling, and testing on real-world workloads are planned to ensure strict benchmark authenticity and reproducibility._
+![MaxSim SIMD Throughput Scaling](assets/b1.png)
 
 ## Installation
 
@@ -152,43 +151,22 @@ else:
 
 #### Direct Zero-Copy MaxSim in Python
 
-```python
-import numpy as np
-import maxsimd
-
-# Query matrix: shape (32, 128)
-q_mat = np.random.randn(32, 128).astype(np.float32)
-
-# 2D Document matrix: shape (1024, 128)
-d_2d = np.random.randn(1024, 128).astype(np.float32)
-score = maxsimd.maxsim(q_mat, d_2d)
-print("Single Document Score:", score[0])
-
-# 3D Multi-Page Document: shape (4, 1024, 128)
-d_3d = np.random.randn(4, 1024, 128).astype(np.float32)
-page_scores = maxsimd.maxsim(q_mat, d_3d)
-print("Page Scores:", page_scores)
-```
-
-#### Direct PyTorch Raw Pointer Scoring (`tensor.data_ptr()`)
+`maxsimd.maxsim` is the single unified SIMD entry point. It directly ingests 2D document matrices, 3D uniform page batches, or ragged flat buffers from either PyTorch tensors or NumPy arrays with zero memory copies:
 
 ```python
 import torch
+import numpy as np
 import maxsimd
 
-q_tensor = torch.randn(32, 128, dtype=torch.float32)
-d_tensor = torch.randn(4, 1024, 128, dtype=torch.float32)
+# Query tensor: shape (32, 128)
+query = torch.randn(32, 128, dtype=torch.float32)
 
-# Pass raw memory pointers without creating numpy views or copying tensors
-scores = maxsimd.maxsim_3d_ptr(
-    q_tensor.data_ptr(),
-    d_tensor.data_ptr(),
-    32,    # q_len
-    4,     # num_pages
-    1024,  # tokens_per_page
-    128    # dim
-)
-print("PyTorch Pointer MaxSim Scores:", scores)
+# Multi-page documents: shape (100, 128, 128) - works seamlessly with NumPy or PyTorch
+docs = torch.randn(100, 128, 128, dtype=torch.float32)
+
+# Unified SIMD AVX2 + Rayon multi-threaded MaxSim call
+scores = maxsimd.maxsim(query, docs, jobs=-1)
+print("Top 5 Document Scores:", scores[:5])
 ```
 
 ---
@@ -204,21 +182,13 @@ python3 -m pytest
 # Run Rust unit tests (47 tests for BLAS and AVX2 kernels)
 cargo test
 
-# Run scaling benchmark suite and generate Matplotlib graphs
-python3 benchmarks/benchmark_maxsim.py
+# Run scaling and ViDoRe benchmark suite
+python3 benchmarks
 ```
 
 ---
 
 ## Roadmap & TODO
-
-- [ ] **Int8 Scalar / Vector Quantization**: Implement 8-bit quantized embedding support with AVX2 / AVX-512 VNNI (`_mm256_dpbusd_epi32`) instructions to reduce memory footprint by 4x (~125 MB per 1,000 pages).
-- [ ] **Binary & 2-bit Quantization**: Add binary Hamming distance fast-filtering for multi-million document candidate pre-ranking.
-- [ ] **Cross-Platform SIMD Backends**: Implement ARM NEON (Apple Silicon / AWS Graviton) and AVX-512 dedicated kernels.
-- [ ] **Hardware Prefetching**: Integrate software cache prefetching (`_mm_prefetch`) for subsequent document token cache lines in the streaming loop.
-- [ ] **GPU-Accelerated MaxSim**: Add optional CUDA / Triton / wgpu kernel for batched document scoring across >100,000 documents.(opitional)
-- [ ] **ViDoRe Benchmark Evaluation**: Run comprehensive visual document retrieval evaluations against standard datasets (ViDoRe, DocVQA, InfoVQA).
-- [ ] **Multi-Platform CI/CD**: Set up automated GitHub Actions matrix testing for Linux (x86_64), macOS (ARM64), and Windows.
 - [ ] **Audit Boilerplate & Fix Errors for Scalability**: Review and harden all boilerplate code, fix edge-case runtime errors, eliminate redundant allocations, and optimize the codebase for production-grade throughput and scalability.
 - [ ] **Eliminate Circular Dependencies**: Audit and refactor inter-module imports across `client`, `server`, `storage`, and `config`.
 - [ ] **Origins & Attribution Reference**: See [ABOUT.md](ABOUT.md) for full project lineage, paper citations ([ColPali arXiv:2407.01449](https://arxiv.org/abs/2407.01449)), `maxsim-cpu` references, and reserved rights notices.

@@ -7,10 +7,33 @@ import typing
 
 __all__ = [
     "maxsim",
-    "quantization",
-    "__version__",
+    "qi8",
 ]
 
+def maxsim(
+    q_ptr: builtins.int,
+    d_ptr: builtins.int,
+    q_len: builtins.int,
+    dim: builtins.int,
+    layout_type: builtins.int,
+    doc_tokens: builtins.int,
+    batch_docs: builtins.int,
+    batch_tokens: builtins.int,
+    doc_lengths: typing.Optional[typing.Sequence[builtins.int]],
+    q_scale_ptr: builtins.int,
+    d_scale_ptr: builtins.int,
+    dtype: builtins.int,
+    jobs: builtins.int,
+) -> builtins.list[builtins.float]: ...
+def qi8(
+    ptr: builtins.int,
+    tokens: builtins.int,
+    dim: builtins.int,
+    out_ptr: builtins.int,
+    scale_ptr: builtins.int,
+    jobs: builtins.int,
+) -> tuple[builtins.list[builtins.int], builtins.list[builtins.float]]: ...
+@typing.overload
 def maxsim(
     q: typing.Any,
     d: typing.Any,
@@ -24,4 +47,4 @@ def maxsim(
     **kwargs: typing.Any,
 ) -> builtins.list[builtins.float]: ...
 
-__version__ = "0.1.2-alpha"
+__version__ = "0.1.3-alpha"
