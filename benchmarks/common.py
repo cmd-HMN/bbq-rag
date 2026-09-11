@@ -83,6 +83,7 @@ def mark_me(
 __all__ = [
     "np",
     "torch",
+    "time",
     "maxsim_cpu",
     "maxsimd",
     "configure_global_threads",

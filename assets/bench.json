@@ -1,0 +1,52 @@
+{
+  "tabfquad": {
+    "hf_id": "vidore/tabfquad_test_subsampled",
+    "desc": "French QA over tables & financial documents",
+    "size_mb": "22.1 MB"
+  },
+  "arxivqa": {
+    "hf_id": "vidore/arxivqa_test_subsampled",
+    "desc": "Scientific papers & academic QA",
+    "size_mb": "73.6 MB"
+  },
+  "tatdqa": {
+    "hf_id": "vidore/tatdqa_test",
+    "desc": "Financial tabular data & complex tables",
+    "size_mb": "129.8 MB"
+  },
+  "infovqa": {
+    "hf_id": "vidore/infovqa_test_subsampled",
+    "desc": "Infographics visual question answering",
+    "size_mb": "208.5 MB"
+  },
+  "synthetic_energy": {
+    "hf_id": "vidore/syntheticDocQA_energy_test",
+    "desc": "Synthetic energy industry reports",
+    "size_mb": "260.9 MB"
+  },
+  "docvqa": {
+    "hf_id": "vidore/docvqa_test_subsampled",
+    "desc": "Scanned document QA (standard DocVQA)",
+    "size_mb": "278.8 MB"
+  },
+  "synthetic_ai": {
+    "hf_id": "vidore/syntheticDocQA_artificial_intelligence_test",
+    "desc": "Synthetic AI industry reports",
+    "size_mb": "290.6 MB"
+  },
+  "synthetic_healthcare": {
+    "hf_id": "vidore/syntheticDocQA_healthcare_industry_test",
+    "desc": "Synthetic healthcare & biomedical reports",
+    "size_mb": "295.4 MB"
+  },
+  "synthetic_gov": {
+    "hf_id": "vidore/syntheticDocQA_government_reports_test",
+    "desc": "Synthetic government & public policy reports",
+    "size_mb": "322.9 MB"
+  },
+  "shiftproject": {
+    "hf_id": "vidore/shiftproject_test",
+    "desc": "The Shift Project climate policy reports",
+    "size_mb": "379.5 MB"
+  }
+}

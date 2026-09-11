@@ -1,8 +1,11 @@
 import re
+from typing import List
+
+import matplotlib.pyplot as plt
+import plotly.graph_objects as go
+from rich.console import Console
 
 from benchmarks.common import mark_me
-from rich.console import Console
-from typing import List
 
 
 def single_run(
@@ -77,6 +80,7 @@ def greport(
     q_len: int = 32,
     dim: int = 128,
     jobs: int = -1,
+    asset_dir=None,
 ):
 
     series_data = {}
@@ -103,14 +107,29 @@ def greport(
         ]
         throughput_data[name] = {"means": tp_means, "stds": tp_stds}
 
-    img_path = report.save_image(
-        name="maxsimd_throughput",
-        x_values=docs,
-        series_data=throughput_data,
-        title="Throughput vs Documents (Higher is Better)",
-        x_label="Document Count",
-        y_label="Throughput (Docs / sec)",
+    fig, ax = plt.subplots(figsize=(10, 5.5), dpi=300)
+    for name, metrics in throughput_data.items():
+        ax.plot(
+            docs,
+            metrics["means"],
+            marker="o",
+            linewidth=2.2,
+            markersize=5,
+            label=name,
+        )
+    ax.set_title(
+        "Throughput vs Documents (Higher is Better)",
+        fontsize=13,
+        fontweight="bold",
+        pad=12,
     )
+    ax.set_xlabel("Document Count", fontsize=10, fontweight="bold")
+    ax.set_ylabel("Throughput (Docs / sec)", fontsize=10, fontweight="bold")
+    ax.set_xticks(docs)
+    ax.legend(frameon=True, facecolor="white", edgecolor="#cbd5e1", fontsize=8.5)
+    ax.grid(True, linestyle="--", alpha=0.4)
+
+    img_path = report.save_fig(fig, "b1", asset_dir=asset_dir)
     c.print(
         f"\n[bold green]Image saved to:[/bold green] [underline]{img_path}[/underline]"
     )
@@ -123,28 +142,54 @@ def greport(
         align="center",
         muted=True,
     )
-    plotly_fig = report.create_plotly_figure(
-        x_values=docs,
-        series_data=throughput_data,
-        title="Throughput vs Documents (Higher is Better)",
-        x_label="Document Count",
-        y_label="Throughput (Docs / sec)",
+    plotly_fig = go.Figure(
+        data=[
+            go.Scatter(
+                x=list(docs),
+                y=metrics["means"],
+                mode="lines+markers",
+                name=name,
+                line=dict(width=2.5),
+                marker=dict(size=7),
+            )
+            for name, metrics in throughput_data.items()
+        ],
+        layout=go.Layout(
+            title="Throughput vs Documents (Higher is Better)",
+            xaxis_title="Document Count",
+            yaxis_title="Throughput (Docs / sec)",
+            template="plotly_white",
+        ),
     )
     page.add_plotly(plotly_fig)
 
-    page.add_metrics_table(
-        x_values=docs,
-        series_data=series_data,
-        throughput_data=throughput_data,
-        function_urls={
-            "MaxSim": "https://github.com/cmd-HMN/bbq-rag",
-            "MaxSim-CPU": "https://pypi.org/project/maxsim-cpu/",
-            "NumPy": "https://numpy.org",
-            "PyTorch Simple": "https://pytorch.org",
-            "PyTorch Einsum": "https://pytorch.org",
-        },
-        title="Benchmark Measurements (Mean ± Std & Throughput):",
-    )
+    urls = {
+        "MaxSim": "https://github.com/cmd-HMN/bbq-rag",
+        "MaxSim-CPU": "https://pypi.org/project/maxsim-cpu/",
+        "NumPy": "https://numpy.org",
+        "PyTorch Simple": "https://pytorch.org",
+        "PyTorch Einsum": "https://pytorch.org",
+    }
+    table_headers = ["Function"] + [f"{d} Docs" for d in docs]
+    table_rows = []
+    for name, metrics in series_data.items():
+        url = urls.get(name)
+        name_html = (
+            f"<a href='{url}' target='_blank'><strong>{name}</strong></a>"
+            if url
+            else f"<strong>{name}</strong>"
+        )
+        row = [name_html]
+        for i, (m, s) in enumerate(zip(metrics["means"], metrics["stds"])):
+            tp = throughput_data[name]["means"][i]
+            row.append(
+                f"<div><strong>{m:.3f}</strong> <span class='ci-bound'>±{s:.3f} ms</span></div>"
+                f"<div style='color: #1F78B4; font-size: 12px;'>{tp:,.0f} docs/s</div>"
+            )
+        table_rows.append(row)
+
+    page.add_heading("Benchmark Measurements (Mean ± Std & Throughput):", level=4)
+    page.add_table(headers=table_headers, rows=table_rows)
 
     html_path = page.save()
     c.print(
@@ -177,6 +222,7 @@ def run(
     seed: int = 42,
     jobs: int = -1,
     report: bool = True,
+    asset_dir=None,
 ):
     r = {}
 
@@ -194,7 +240,7 @@ def run(
         )
 
     if report:
-        greport(c, r, docs, q_len=q_len, dim=dim, jobs=jobs)
+        greport(c, r, docs, q_len=q_len, dim=dim, jobs=jobs, asset_dir=asset_dir)
     else:
         for d in docs:
             c.print(f"[bold red]Results for {d} documents:[/bold red]")

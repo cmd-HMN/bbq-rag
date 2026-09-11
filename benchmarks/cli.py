@@ -40,8 +40,8 @@ def bm_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--suite",
         type=str,
-        default="maxsimd",
-        choices=["maxsimd", "vidore"],
+        default="all",
+        choices=["maxsimd", "vidore", "all"],
         help="Benchmark to run (e.g. --suite maxsimd) options: maxsimd, vidore",
     )
 
@@ -68,9 +68,56 @@ def bm_parser() -> argparse.ArgumentParser:
 
     parser.add_argument(
         "--report",
-        type=lambda x: x.lower() not in ("false", "0", "no"),
+        nargs="?",
+        const=True,
         default=True,
+        type=lambda x: x.lower() not in ("false", "0", "no"),
         help="Generate report (default: True)",
+    )
+
+    parser.add_argument(
+        "--dataset",
+        "--datasets",
+        nargs="+",
+        default=None,
+        help="Specific ViDoRe dataset(s) to benchmark (default: all)",
+    )
+
+    parser.add_argument(
+        "--force",
+        nargs="?",
+        const=True,
+        default=False,
+        type=lambda x: x.lower() not in ("false", "0", "no"),
+        help="Force re-download and re-embedding for ViDoRe (default: False)",
+    )
+
+    parser.add_argument(
+        "--data-dir",
+        "--data_dir",
+        type=str,
+        default="data/vidore",
+        help="Directory for ViDoRe datasets (default: data/vidore)",
+    )
+
+    parser.add_argument(
+        "--emb-dir",
+        "--emb_dir",
+        type=str,
+        default="data/embeddings",
+        help="Directory for ViDoRe embeddings (default: data/embeddings)",
+    )
+
+    parser.add_argument(
+        "--asset",
+        "--assets",
+        "--asset-dir",
+        "--asset_dir",
+        dest="asset_dir",
+        nargs="?",
+        const="assets",
+        default=None,
+        help="Save b1/b2 benchmark images to asset directory (default: None, only saves in bench/ folder. Pass --asset to save to assets/)",
     )
 
     return parser
@@ -80,10 +127,36 @@ def main():
     p = bm_parser()
     args = p.parse_args()
 
-    print_bbq(name=args.suite)
     configure_global_threads(args.jobs)
 
-    if args.suite == "maxsimd":
+    if args.suite == "all":
+        print_bbq(name=args.suite)
+        from benchmarks.maxsimd.run import run as run_maxsimd
+
+        run_maxsimd(
+            q_len=args.q_len,
+            tokens_per_doc=args.dim,
+            docs=args.docs,
+            dim=args.dim,
+            seed=args.seed,
+            jobs=args.jobs,
+            report=args.report,
+            asset_dir=args.asset_dir,
+        )
+
+        from benchmarks.vidore.run import run as run_vidore
+
+        run_vidore(
+            datasets=args.dataset,
+            force=args.force,
+            report=args.report,
+            data_dir=args.data_dir,
+            emb_dir=args.emb_dir,
+            asset_dir=args.asset_dir,
+        )
+
+    elif args.suite == "maxsimd":
+        print_bbq(name=args.suite)
         from benchmarks.maxsimd.run import run
 
         run(
@@ -93,18 +166,20 @@ def main():
             dim=args.dim,
             seed=args.seed,
             jobs=args.jobs,
-            report=args.report
+            report=args.report,
+            asset_dir=args.asset_dir,
         )
-    # elif args.suite == "vidore":
-    #     from benchmarks.vidore.run import run
-    #
-    #     run(
-    #         q_len=args.q_len,
-    #         tokens_per_doc=args.dim,
-    #         num_docs=args.docs,
-    #         dim=args.dim,
-    #         seed=args.seed,
-    #         jobs=args.jobs,
+    elif args.suite == "vidore":
+        print_bbq(name=args.suite)
+        from benchmarks.vidore.run import run
 
+        run(
+            datasets=args.dataset,
+            force=args.force,
+            report=args.report,
+            data_dir=args.data_dir,
+            emb_dir=args.emb_dir,
+            asset_dir=args.asset_dir,
+        )
     else:
         raise ValueError(f"Unknown benchmark suite: {args.suite}")

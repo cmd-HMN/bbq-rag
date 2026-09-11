@@ -14,13 +14,21 @@ def bm_maxsim(
         jobs=jobs,
     )
 
+# use 32 dim as it doesn't support variable dim
 def bm_maxsim_cpu(
     q_mat: np.ndarray,
     docs_3d_mat: np.ndarray,
 ) -> List[float]:
     """Official maxsim-cpu PyPI library function maxsim_scores"""
 
-    scores = maxsim_cpu.maxsim_scores(q_mat, docs_3d_mat)  # type: ignore
+    if q_mat.shape[0] <= 32:
+        scores = maxsim_cpu.maxsim_scores(q_mat, docs_3d_mat)  # type: ignore
+    else:
+        scores = np.zeros(docs_3d_mat.shape[0], dtype=np.float32)
+        for i in range(0, q_mat.shape[0], 32):
+            q_chunk = np.ascontiguousarray(q_mat[i : i + 32])
+            scores += maxsim_cpu.maxsim_scores(q_chunk, docs_3d_mat)  # type: ignore
+
     return scores.tolist() if isinstance(scores, np.ndarray) else list(scores)
 
 
