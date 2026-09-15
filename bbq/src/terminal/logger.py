@@ -4,7 +4,7 @@ from typing import Optional
 from rich.console import Console
 from rich.logging import RichHandler
 
-from bbq.src.config import get_system_cache_dir
+from bbq.src.utils.futils import get_system_cache_dir
 
 class BBQLogger:
     """

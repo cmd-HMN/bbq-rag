@@ -40,6 +40,13 @@ class GeminiClient:
         """Returns True if a valid API key is configured."""
         return bool(self.api_key and self.api_key.strip())
 
+    @classmethod
+    def from_config(cls, config: Any, timeout: int = 90) -> "GeminiClient":
+        """
+        Instantiates a GeminiClient using settings from a Config object.
+        """
+        return cls(api_key=getattr(config, "gemini_api_key", None), model=getattr(config, "gemini_model", DEFAULT_GEMINI_MODEL), timeout=timeout)
+
     @staticmethod
     def _image_to_base64_part(image: Image.Image, format: str = "JPEG", quality: int = 85) -> Dict[str, Any]:
         """Converts a PIL Image into Gemini's inlineData base64 part."""

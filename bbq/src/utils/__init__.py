@@ -1,6 +1,7 @@
 import importlib
 from typing import Any
 
+from bbq.src.utils.futils import get_system_cache_dir
 from bbq.src.utils.pdf_utils import (
     compute_file_sha256_hash,
     extract_pdf_pages_to_pil_images,
@@ -13,6 +14,7 @@ _LAZY_IMPORTS = {
     "BaseEngineWrapper": "bbq.src.common.base",
     "EngineModelLoader": "bbq.src.utils.model_loader",
     "EngineWrapper": "bbq.src.utils.model_loader",
+    "initialize_engine": "bbq.src.utils.model_loader",
     "initialize_engine_from_yaml_config": "bbq.src.utils.model_loader",
     "PDFWatchHandler": "bbq.src.utils.watcher",
     "start_pdf_folder_watcher": "bbq.src.utils.watcher",
@@ -33,4 +35,6 @@ __all__ = [
     "compute_file_sha256_hash",
     "extract_pdf_pages_to_pil_images",
     "extract_single_pdf_page_image",
+    "get_system_cache_dir",
+    "initialize_engine",
 ]

@@ -31,3 +31,6 @@ pdf_render_dpi: 150
 gemini_api_key: ""
 gemini_model: "gemini-3.6-flash"
 rag_top_k: 3
+
+# Quantization precision mode: "f32" (default) or "qi8" (quantized INT8)
+quantization: "f32"

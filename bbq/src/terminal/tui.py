@@ -1,10 +1,11 @@
 import logging
+
 from rich.console import Console
+from rich.logging import RichHandler
 from rich.panel import Panel
 from rich.table import Table
-from rich.logging import RichHandler
 
-from bbq.src.config import ModelConfigWrapper
+from bbq.src.config import Config
 
 
 def create_rich_console_logging_handler() -> RichHandler:
@@ -16,7 +17,7 @@ def create_rich_console_logging_handler() -> RichHandler:
     )
 
 
-def render_server_status_rich_panel(config: ModelConfigWrapper) -> Panel:
+def render_server_status_rich_panel(config: Config) -> Panel:
     table = Table(show_header=False, expand=True, box=None)
     table.add_column("Key", style="bold green", width=22)
     table.add_column("Value", style="bold white")

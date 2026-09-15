@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 Client module for interacting with the ColPali Document Retrieval Server,
 retrieving document matches, and fetching/saving page images.
@@ -6,10 +8,13 @@ retrieving document matches, and fetching/saving page images.
 import os
 import logging
 import time
-from typing import List, Dict, Any, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 import requests
 from PIL import Image
 import io
+
+if TYPE_CHECKING:
+    from bbq.src.config import Config
 
 logger = logging.getLogger("bbq.client")
 
@@ -22,10 +27,10 @@ class BBQClient:
     def __init__(
         self,
         server_url: str = "http://localhost:8000",
-        config: Optional[Any] = None,
+        config: Optional[Config] = None,
     ) -> None:
         self.server_url: str = server_url.rstrip("/")
-        self.config = config
+        self.config: Optional[Config] = config
 
     def get_status(self) -> Dict[str, Any]:
         """Retrieves server status information."""

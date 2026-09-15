@@ -3,7 +3,7 @@ import sqlite3
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
-from bbq.src.config import get_system_cache_dir
+from bbq.src.utils.futils import get_system_cache_dir
 
 
 class SqlliteDB:

@@ -1,5 +1,4 @@
 import sys
-import os
 import argparse
 import logging
 from pathlib import Path
@@ -10,8 +9,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 def run_server_command(args: argparse.Namespace) -> None:
     """Launches the persistent document-indexing server."""
+    from bbq.src.config import Config
     from bbq.src.server import start_document_indexing_server
+
+    config = Config.from_yaml(config_filepath=args.config)
     start_document_indexing_server(
+        config=config,
         config_filepath=args.config,
         host=args.host,
         port=args.port,
@@ -21,13 +24,13 @@ def run_server_command(args: argparse.Namespace) -> None:
 def run_client_query_command(args: argparse.Namespace) -> None:
     """Launches a client query against the running server with optional Gemini multimodal RAG."""
     from bbq.src.client import BBQClient
-    from bbq.src.config import load_configuration_from_yaml_file
+    from bbq.src.config import Config
 
     log_level = logging.INFO if args.verbose else logging.WARNING
     logging.basicConfig(level=log_level, format="[%(asctime)s] [%(levelname)s] [%(name)s]: %(message)s")
 
     # Load configuration from config.py / config.yaml
-    config = load_configuration_from_yaml_file(config_filepath=args.config)
+    config = Config.from_yaml(config_filepath=args.config)
 
     top_k = args.top_k if args.top_k is not None else config.rag_top_k
     gemini_key = args.gemini_api_key or config.gemini_api_key
