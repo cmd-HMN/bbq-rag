@@ -1,16 +1,17 @@
 import sys
 import argparse
 import logging
-from pathlib import Path
-
-# Ensure workspace root is in sys.path
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+from bbq.src.common.version import __version__, _read_project_version
 
 
 def run_server_command(args: argparse.Namespace) -> None:
     """Launches the persistent document-indexing server."""
     from bbq.src.config import Config
     from bbq.src.server import start_document_indexing_server
+    from bbq.src.terminal.tui import print_bbq
+
+    if not getattr(args, "without_logo", False):
+        print_bbq(tag="SERVER", server=getattr(args, "port", 8000))
 
     config = Config.from_yaml(config_filepath=args.config)
     start_document_indexing_server(
@@ -23,76 +24,157 @@ def run_server_command(args: argparse.Namespace) -> None:
 
 def run_client_query_command(args: argparse.Namespace) -> None:
     """Launches a client query against the running server with optional Gemini multimodal RAG."""
+    # Support checking server status or documents via client query command
+    if getattr(args, "status", False):
+        run_status_command(args)
+        return
+    if getattr(args, "documents", False):
+        run_documents_command(args)
+        return
+
+    from rich.console import Console
     from bbq.src.client import BBQClient
     from bbq.src.config import Config
-
-    log_level = logging.INFO if args.verbose else logging.WARNING
-    logging.basicConfig(level=log_level, format="[%(asctime)s] [%(levelname)s] [%(name)s]: %(message)s")
+    from bbq.src.terminal import (
+        print_bbq,
+        render_query_results_rich,
+        render_llm_answer_rich,
+        print_interactive_help,
+        interactive_page_picker,
+    )
 
     # Load configuration from config.py / config.yaml
-    config = Config.from_yaml(config_filepath=args.config)
+    config = Config.from_yaml(config_filepath=getattr(args, "config", "config.yaml"))
 
-    top_k = args.top_k if args.top_k is not None else config.rag_top_k
+    top_k = args.top_k if args.top_k is not None else (config.rag_top_k or 10)
     gemini_key = args.gemini_api_key or config.gemini_api_key
     gemini_model = args.gemini_model or config.gemini_model
+    use_llm = getattr(args, "use_llm", False)
+    is_infinite = getattr(args, "infinite", False)
 
-    client = BBQClient(server_url=args.server, config=config)
-    try:
-        print(f"Sending query to {args.server}: '{args.query}' (top_k={top_k})...\n")
+    if not getattr(args, "without_logo", False):
+        print_bbq(tag="CLIENT", server=args.server, top_k=top_k)
 
-        # Execute unified query + multimodal answer generation
-        rag_response = client.query_and_answer(
-            query_text=args.query,
-            top_k=top_k,
-            gemini_api_key=gemini_key,
-            gemini_model=gemini_model,
-            save_images=args.save_images,
+    log_level = logging.INFO if getattr(args, "verbose", False) else logging.WARNING
+    logging.basicConfig(
+        level=log_level, format="[%(asctime)s] [%(levelname)s] [%(name)s]: %(message)s"
+    )
+
+    console = Console()
+
+    if not args.query and not is_infinite:
+        console.print(
+            "[red]Error: query text string is required (or run with --infinite for interactive mode).[/red]"
+        )
+        sys.exit(1)
+
+    client = BBQClient(
+        server_url=args.server,
+        config=config,
+        without_logo=getattr(args, "without_logo", False),
+    )
+
+    current_query = args.query
+
+    if is_infinite and not current_query:
+        console.print(
+            "[dim]Interactive mode active. Enter any query, 'help' for instructions, or 'q' to exit.[/dim]\n"
         )
 
-        results = rag_response.get("sources", [])
-        answer = rag_response.get("answer")
-        status = rag_response.get("status")
+    while True:
+        if not current_query:
+            try:
+                current_query = console.input(
+                    r"[bold red]bbq[/bold red][bold yellow]\[query][/bold yellow] [bold white]>>[/bold white] "
+                ).strip()
+            except (KeyboardInterrupt, EOFError):
+                console.print("\n[dim]Exiting interactive query mode. Bye![/dim]")
+                break
 
-        if not results:
-            print("No matching PDF pages found.")
-            return
+        if not current_query:
+            if not is_infinite:
+                break
+            continue
 
-        # 1. If Gemini generated an answer, display it prominently
-        if answer:
-            print("=" * 60)
-            print(f"GEMINI MULTIMODAL ANSWER ({rag_response.get('engine', 'gemini')}):")
-            print("=" * 60)
-            print(answer)
-            print("\n" + "=" * 60)
-            print(f"GROUNDED RETRIEVED SOURCES (Top {len(results)} Pages):")
-            print("=" * 60)
-        else:
-            if status == "fallback_pages_only":
-                reason = rag_response.get("fallback_reason", "No API key or API call failed")
-                print(f"[Note: {reason}]")
-            print(f"Top {len(results)} Matching PDF Pages (Book Results):\n" + "=" * 60)
+        if current_query.lower() in ("help", "?", ":help"):
+            print_interactive_help(console)
+            current_query = None
+            continue
 
-        # 2. Display the retrieved book pages
-        for i, res in enumerate(results, 1):
-            print(f"Rank {i}:")
-            print(f"  Score       : {res['score']:.4f}")
-            print(f"  PDF File    : {res['file_path']}")
-            print(f"  Page        : Page {res['page_number']} of {res['total_pages']}")
-            print(f"  File Hash   : {res['file_hash'][:12]}")
-            if res.get("saved_image_path"):
-                print(f"  Saved Image : {res['saved_image_path']}")
-            print("-" * 60)
+        if current_query.lower() in ("clear", "cls", ":clear"):
+            console.clear()
+            print_bbq(tag="CLIENT", server=args.server, top_k=top_k)
+            current_query = None
+            continue
 
-    except Exception as err:
-        print(f"Error querying BBQ server: {err}", file=sys.stderr)
-        sys.exit(1)
+        if current_query.lower() in ("exit", "quit", ":q", "q"):
+            console.print("[dim]Exiting interactive query mode. Bye![/dim]")
+            break
+
+        try:
+            # 1. Fetch search matches from server
+            results = client.query(query_text=current_query, top_k=top_k)
+
+            if not results:
+                console.print("[yellow]No matching PDF pages found.[/yellow]")
+            else:
+                # 2. Interactive arrow-key page picker (Option C) unless --without-opener is passed
+                if not getattr(args, "without_opener", False) and sys.stdin.isatty():
+                    interactive_page_picker(results, console=console)
+                else:
+                    render_query_results_rich(results, console=console)
+
+                # 3. If --use-llm is specified, pass top-k to LLM with cooking spinner
+                if use_llm:
+                    with console.status(
+                        "[bold cyan]LLM model is viewing the query and retrieved pages, cooking the meal...[/bold cyan]",
+                        spinner="dots",
+                    ):
+                        rag_response = client.generate_answer_from_results(
+                            query_text=current_query,
+                            results=results,
+                            gemini_api_key=gemini_key,
+                            gemini_model=gemini_model,
+                            save_images=args.save_images,
+                        )
+
+                    answer = rag_response.get("answer")
+                    if answer:
+                        render_llm_answer_rich(
+                            answer=answer,
+                            engine=rag_response.get("engine", "gemini"),
+                            console=console,
+                        )
+                    else:
+                        fallback_reason = rag_response.get(
+                            "fallback_reason", "No API key or API call failed"
+                        )
+                        console.print(
+                            f"\n[yellow][Note: LLM answer unavailable: {fallback_reason}][/yellow]"
+                        )
+
+        except Exception as err:
+            console.print(f"[red]Error querying BBQ server:[/red] {err}")
+            if not is_infinite:
+                sys.exit(1)
+
+        if not is_infinite:
+            break
+
+        current_query = None
 
 
 def run_status_command(args: argparse.Namespace) -> None:
     """Fetches and displays running server status."""
     from bbq.src.client import BBQClient
+    from bbq.src.terminal.tui import print_bbq
 
-    client = BBQClient(server_url=args.server)
+    if not getattr(args, "without_logo", False):
+        print_bbq(tag="CLIENT", server=args.server)
+
+    client = BBQClient(
+        server_url=args.server, without_logo=getattr(args, "without_logo", False)
+    )
     try:
         status = client.get_status()
         print("Server Status:")
@@ -107,8 +189,14 @@ def run_status_command(args: argparse.Namespace) -> None:
 def run_documents_command(args: argparse.Namespace) -> None:
     """Lists all indexed document records."""
     from bbq.src.client import BBQClient
+    from bbq.src.terminal.tui import print_bbq
 
-    client = BBQClient(server_url=args.server)
+    if not getattr(args, "without_logo", False):
+        print_bbq(tag="CLIENT", server=args.server)
+
+    client = BBQClient(
+        server_url=args.server, without_logo=getattr(args, "without_logo", False)
+    )
     try:
         documents = client.list_documents()
         if not documents:
@@ -132,46 +220,233 @@ def build_argument_parser() -> argparse.ArgumentParser:
         prog="bbq",
         description="BBQ RAG - Unified Server & Client CLI Engine",
     )
+    parser.add_argument(
+        "--version",
+        "-V",
+        action="version",
+        version=f"bbq {__version__}",
+    )
+    parser.add_argument(
+        "--without-logo",
+        "--no-logo",
+        action="store_true",
+        default=False,
+        help="Do not print BBQ logo banner on run",
+    )
+
+    client_parent = argparse.ArgumentParser(add_help=False)
+    client_parent.add_argument(
+        "--without-logo",
+        "--no-logo",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Do not print BBQ logo banner on run",
+    )
 
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
     # --- Server Command ---
-    server_parser = subparsers.add_parser("server", help="Start persistent document indexing HTTP server")
-    server_parser.add_argument(
-        "--config", "-c", type=str, default="config.yaml", help="Path to YAML config file (default: config.yaml)"
+    server_parser = subparsers.add_parser(
+        "server", help="Start persistent document indexing HTTP server"
     )
-    server_parser.add_argument("--host", type=str, default="0.0.0.0", help="HTTP server bind host (default: 0.0.0.0)")
-    server_parser.add_argument("--port", "-p", type=int, default=8000, help="HTTP server bind port (default: 8000)")
+    server_parser.add_argument(
+        "--config",
+        "-c",
+        type=str,
+        default="config.yaml",
+        help="Path to YAML config file (default: config.yaml)",
+    )
+    server_parser.add_argument(
+        "--host",
+        type=str,
+        default="0.0.0.0",
+        help="HTTP server bind host (default: 0.0.0.0)",
+    )
+    server_parser.add_argument(
+        "--port",
+        "-p",
+        type=int,
+        default=8000,
+        help="HTTP server bind port (default: 8000)",
+    )
     server_parser.set_defaults(func=run_server_command)
 
     # --- Query / Client Command ---
-    query_parser = subparsers.add_parser("query", help="Query indexed documents via client API with optional Gemini RAG")
-    query_parser.add_argument("query", type=str, help="Search query text string")
-    query_parser.add_argument(
-        "--config", "-c", type=str, default="config.yaml", help="Path to YAML config file (default: config.yaml)"
-    )
-    query_parser.add_argument("--server", "-s", type=str, default="http://localhost:8000", help="Server URL (default: http://localhost:8000)")
-    query_parser.add_argument("--top-k", "-k", type=int, default=None, help="Top K results to retrieve (default from config: 3)")
-    query_parser.add_argument(
-        "--gemini-api-key", "-g", type=str, default=None, help="Google Gemini API key (or set in config.yaml / GEMINI_API_KEY env var)"
+    query_parser = subparsers.add_parser(
+        "query",
+        aliases=["client"],
+        parents=[client_parent],
+        help="Query indexed documents via client API with optional Gemini RAG",
     )
     query_parser.add_argument(
-        "--gemini-model", type=str, default=None, help="Gemini model name (default from config: gemini-3.6-flash)"
+        "query",
+        type=str,
+        nargs="?",
+        default=None,
+        help="Search query text string (optional when using --infinite)",
     )
-    query_parser.add_argument("--save-images", "-i", action="store_true", help="Save page images to disk")
-    query_parser.add_argument("--verbose", "-v", action="store_true", help="Enable verbose client debug logging")
+    query_parser.add_argument(
+        "--infinite",
+        "-inf",
+        action="store_true",
+        default=False,
+        help="Run interactive continuous query prompt loop",
+    )
+    query_parser.add_argument(
+        "--config",
+        "-c",
+        type=str,
+        default="config.yaml",
+        help="Path to YAML config file (default: config.yaml)",
+    )
+    query_parser.add_argument(
+        "--server",
+        "-s",
+        type=str,
+        default="http://localhost:8000",
+        help="Server URL (default: http://localhost:8000)",
+    )
+    query_parser.add_argument(
+        "--top-k",
+        "-k",
+        type=int,
+        default=None,
+        help="Top K results to retrieve (default from config.yaml rag_top_k: 20)",
+    )
+    query_parser.add_argument(
+        "--use-llm",
+        action="store_true",
+        default=False,
+        help="Pass top-k retrieved pages to LLM for multimodal answer generation",
+    )
+    query_parser.add_argument(
+        "--gemini-api-key",
+        "-g",
+        type=str,
+        default=None,
+        help="Google Gemini API key (or set in config.yaml / GEMINI_API_KEY env var)",
+    )
+    query_parser.add_argument(
+        "--gemini-model",
+        type=str,
+        default=None,
+        help="Gemini model name (default from config: gemini-3.6-flash)",
+    )
+    query_parser.add_argument(
+        "--save-images", "-i", action="store_true", help="Save page images to disk"
+    )
+    query_parser.add_argument(
+        "--verbose",
+        "-v",
+        action="store_true",
+        help="Enable verbose client debug logging",
+    )
+    query_parser.add_argument(
+        "--without-opener",
+        "--no-opener",
+        action="store_true",
+        default=False,
+        help="Do not launch interactive document page opener after search query",
+    )
     query_parser.set_defaults(func=run_client_query_command)
 
     # --- Status Command ---
-    status_parser = subparsers.add_parser("status", help="Check running server status")
-    status_parser.add_argument("--server", "-s", type=str, default="http://localhost:8000", help="Server URL")
+    status_parser = subparsers.add_parser(
+        "status", parents=[client_parent], help="Check running server status"
+    )
+    status_parser.add_argument(
+        "--server", "-s", type=str, default="http://localhost:8000", help="Server URL"
+    )
     status_parser.set_defaults(func=run_status_command)
 
     # --- Documents Command ---
-    docs_parser = subparsers.add_parser("documents", help="List indexed document metadata")
-    docs_parser.add_argument("--server", "-s", type=str, default="http://localhost:8000", help="Server URL")
+    docs_parser = subparsers.add_parser(
+        "documents", parents=[client_parent], help="List indexed document metadata"
+    )
+    docs_parser.add_argument(
+        "--server", "-s", type=str, default="http://localhost:8000", help="Server URL"
+    )
     docs_parser.set_defaults(func=run_documents_command)
 
+    return parser
+
+
+def build_client_main_parser() -> argparse.ArgumentParser:
+    """Builds the standalone parser used by python -m bbq.src.client."""
+    parser = argparse.ArgumentParser(
+        prog="python -m bbq.src.client",
+        description="BBQ RAG - Client CLI Query & Management Engine",
+    )
+    parser.add_argument(
+        "--version",
+        "-V",
+        action="version",
+        version=f"bbq {__version__}",
+    )
+    parser.add_argument(
+        "query", type=str, nargs="?", default=None, help="Search query text string"
+    )
+    parser.add_argument(
+        "--config",
+        "-c",
+        type=str,
+        default="config.yaml",
+        help="Path to YAML config file",
+    )
+    parser.add_argument(
+        "--server",
+        "-s",
+        type=str,
+        default="http://localhost:8000",
+        help="Server URL (default: http://localhost:8000)",
+    )
+    parser.add_argument(
+        "--top-k",
+        "-k",
+        type=int,
+        default=None,
+        help="Top K results to retrieve (default from config.yaml rag_top_k: 20)",
+    )
+    parser.add_argument(
+        "--use-llm",
+        action="store_true",
+        default=False,
+        help="Pass top-k retrieved pages to LLM for multimodal answer generation",
+    )
+    parser.add_argument(
+        "--infinite",
+        "-inf",
+        action="store_true",
+        default=False,
+        help="Run interactive continuous query prompt loop",
+    )
+    parser.add_argument(
+        "--gemini-api-key", "-g", type=str, default=None, help="Google Gemini API key"
+    )
+    parser.add_argument(
+        "--gemini-model", type=str, default=None, help="Gemini model name"
+    )
+    parser.add_argument(
+        "--save-images", "-i", action="store_true", help="Save page images to disk"
+    )
+    parser.add_argument(
+        "--without-logo",
+        "--no-logo",
+        action="store_true",
+        default=False,
+        help="Do not print BBQ logo banner on run",
+    )
+    parser.add_argument(
+        "--without-opener",
+        "--no-opener",
+        action="store_true",
+        default=False,
+        help="Do not launch interactive document page opener",
+    )
+    parser.add_argument("--status", action="store_true", help="Check server status")
+    parser.add_argument(
+        "--documents", action="store_true", help="List indexed documents"
+    )
     return parser
 
 
@@ -180,11 +455,23 @@ def main() -> None:
     if (
         len(sys.argv) > 1
         and not sys.argv[1].startswith("-")
-        and sys.argv[1] not in ["server", "query", "status", "documents", "-h", "--help"]
+        and sys.argv[1]
+        not in [
+            "server",
+            "query",
+            "client",
+            "status",
+            "documents",
+            "-h",
+            "--help",
+            "-V",
+            "--version",
+        ]
     ):
         config_path = sys.argv[1]
         print(f"Launching server mode with config: {config_path}")
         from bbq.src.server import start_document_indexing_server
+
         start_document_indexing_server(config_filepath=config_path)
         return
 
@@ -193,6 +480,7 @@ def main() -> None:
     # Default to server mode if no arguments provided
     if len(sys.argv) == 1:
         from bbq.src.server import start_document_indexing_server
+
         start_document_indexing_server(config_filepath="config.yaml")
         return
 

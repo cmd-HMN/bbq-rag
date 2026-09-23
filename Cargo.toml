@@ -19,19 +19,14 @@ rust.unsafe_code = "allow"
 
 [dependencies]
 pyo3 = "0.29.0"
-rayon   = "1.10"
+rayon = "1.10"
 pyo3-stub-gen = "0.23.0"
 intel-mkl-src = { version = "0.8.1", optional = true, features = ["mkl-static-lp64-seq"] }
-libc = {version = "0.2", optional = true}
-# [dependencies.intel-mkl-src]
-# version = "0.8.1"
-# optional = true
+libc = { version = "0.2", optional = true }
 
 [dev-dependencies]
 criterion = "0.8.2"
-approx = "0.5"
 rand = "0.10.2"
-
 
 [[bin]]
 name = "stub"

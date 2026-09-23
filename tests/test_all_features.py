@@ -110,7 +110,9 @@ def test_query_retrieval_pipeline():
                 return torch.randn(1, 4, 128)
 
         mock_engine = MockEngine()
-        results = query_indexed_documents("test search query", mock_engine, tracker, top_k=2)
+        results = query_indexed_documents(
+            "test search query", mock_engine, tracker, top_k=2
+        )
 
         assert len(results) == 2
         assert results[0]["file_path"] == pdf_path
@@ -241,7 +243,9 @@ def test_quantization_qi8_and_quantized_maxsim():
     assert d_scale.dtype == torch.float32
 
     # Call maxsim with quantized tensors
-    scores_torch = maxsimd.maxsim(q_val, d_val, q_scale=q_scale, d_scale=d_scale, jobs=-1)
+    scores_torch = maxsimd.maxsim(
+        q_val, d_val, q_scale=q_scale, d_scale=d_scale, jobs=-1
+    )
     assert len(scores_torch) == 4
     for s in scores_torch:
         assert isinstance(s, float)
@@ -264,7 +268,9 @@ def test_quantization_qi8_and_quantized_maxsim():
     assert d_np_scale.shape == (20, dim // 32)
     assert d_np_scale.dtype == np.float32
 
-    scores_np = maxsimd.maxsim(q_np_val, d_np_val, q_scale=q_np_scale, d_scale=d_np_scale)
+    scores_np = maxsimd.maxsim(
+        q_np_val, d_np_val, q_scale=q_np_scale, d_scale=d_np_scale
+    )
     assert len(scores_np) == 1
     assert isinstance(scores_np[0], float)
     assert np.isfinite(scores_np[0])

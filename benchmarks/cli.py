@@ -120,6 +120,14 @@ def bm_parser() -> argparse.ArgumentParser:
         help="Save b1/b2 benchmark images to asset directory (default: None, only saves in bench/ folder. Pass --asset to save to assets/)",
     )
 
+    parser.add_argument(
+        "--without-logo",
+        "--no-logo",
+        action="store_true",
+        default=False,
+        help="Do not print BBQ logo banner on run",
+    )
+
     return parser
 
 
@@ -129,8 +137,10 @@ def main():
 
     configure_global_threads(args.jobs)
 
-    if args.suite == "all":
+    if not args.without_logo:
         print_bbq(name=args.suite)
+
+    if args.suite == "all":
         from benchmarks.maxsimd.run import run as run_maxsimd
 
         run_maxsimd(
@@ -156,7 +166,6 @@ def main():
         )
 
     elif args.suite == "maxsimd":
-        print_bbq(name=args.suite)
         from benchmarks.maxsimd.run import run
 
         run(
@@ -170,7 +179,6 @@ def main():
             asset_dir=args.asset_dir,
         )
     elif args.suite == "vidore":
-        print_bbq(name=args.suite)
         from benchmarks.vidore.run import run
 
         run(

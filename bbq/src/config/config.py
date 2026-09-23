@@ -83,13 +83,33 @@ class Config:
         """
         Load configuration from a YAML file.
         """
-        if not os.path.exists(config_filepath):
+        resolved_path = config_filepath
+        if not os.path.exists(resolved_path):
+            candidates = [
+                os.path.join(os.getcwd(), config_filepath),
+                os.path.join(
+                    os.path.dirname(
+                        os.path.dirname(
+                            os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                        )
+                    ),
+                    config_filepath,
+                ),
+            ]
+            for candidate in candidates:
+                if os.path.exists(candidate):
+                    resolved_path = candidate
+                    break
+
+        if not os.path.exists(resolved_path):
             warnings.warn(
                 f"Configuration file not found at path: '{config_filepath}'. Proceeding with default settings.",
                 category=ConfigFNFWarning,
                 stacklevel=2,
             )
             return cls()
+
+        config_filepath = resolved_path
 
         try:
             with open(config_filepath, "r", encoding="utf-8") as file_stream:
