@@ -15,6 +15,12 @@ dependencies = [
     "pymupdf",
     "watchdog",
     "rich",
+    "pillow",
+    "pyyaml",
+    "fastapi",
+    "uvicorn",
+    "requests",
+    "numpy",
 ]
 dynamic = ["version"]
 

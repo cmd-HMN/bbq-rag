@@ -4,6 +4,7 @@ and --without-logo suppression behavior.
 """
 
 import io
+import os
 from unittest.mock import patch, MagicMock
 from PIL import Image
 
@@ -371,6 +372,10 @@ def test_main_cli_interactive_clear_command(mock_clear, mock_input, capsys):
     assert "Exiting interactive query mode. Bye!" in out
 
 
+@pytest.mark.skipif(
+    bool(os.environ.get("CI")) or bool(os.environ.get("GITHUB_ACTIONS")),
+    reason="Document page opener requires GUI PDF viewer not available in headless CI environment",
+)
 def test_open_document_page(monkeypatch):
     """Verify open_document_page calls subprocess.Popen with page arguments."""
     from bbq.src.terminal import open_document_page
@@ -383,6 +388,7 @@ def test_open_document_page(monkeypatch):
 
     monkeypatch.setattr("subprocess.Popen", mock_popen)
     monkeypatch.setattr("os.path.exists", lambda p: True)
+    monkeypatch.setattr("shutil.which", lambda cmd: f"/usr/bin/{cmd}")
 
     success = open_document_page("data/watch/test.pdf", page_number=42)
     assert success is True
