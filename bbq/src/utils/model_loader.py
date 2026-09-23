@@ -1,38 +1,51 @@
 from typing import Any, List, Optional, Tuple, Type, Union
 
-from peft import PeftConfig, PeftModel
 import torch
+from peft import PeftConfig, PeftModel
 from transformers import logging as tf_logging
 
 from bbq.src.common.base import BaseEngineWrapper, BaseModel, BaseModelLoader, BaseProcessor
-from bbq.src.models.registry import ModelRegistry
-from bbq.src.config import (
-    ModelConfigWrapper,
-    determine_target_torch_device,
-    load_configuration_from_yaml_file,
-    resolve_torch_data_type,
-)
 from bbq.src.common.errors import (
     BaseModelInstantiateError,
     LoRAAdapterLoadError,
     ProcessorLoadError,
 )
+from bbq.src.config import Config
+from bbq.src.models.registry import ModelRegistry
 
 tf_logging.set_verbosity_warning()
+
+
+def determine_target_torch_device(device_preference: str = "auto") -> str:
+    """Determine the target torch device based on preference and CUDA availability."""
+    if device_preference == "auto":
+        return "cuda" if torch.cuda.is_available() else "cpu"
+    return device_preference
+
+
+def resolve_torch_data_type(dtype_name: str = "bfloat16", target_device: str = "cpu") -> torch.dtype:
+    """Resolve the torch data type based on name and target device."""
+    if target_device == "cpu":
+        return torch.float32
+    if dtype_name == "bfloat16":
+        return torch.bfloat16
+    elif dtype_name == "float16":
+        return torch.float16
+    return torch.float32
+
 
 class EngineModelLoader(BaseModelLoader):
     """
     Class for loading engine models
     """
+
     @classmethod
-    def load_model_and_processor(
-        cls, config_input: Any
-    ) -> Tuple[Union[BaseModel, PeftModel], BaseProcessor]:
+    def load_model_and_processor(cls, config_input: Any) -> Tuple[Union[BaseModel, PeftModel], BaseProcessor]:
         return cls.load_model_with_lora_adapters(config_input)
 
     @staticmethod
     def load_model_with_lora_adapters(
-        config_input: Union[str, ModelConfigWrapper],
+        config_input: Union[str, Config],
     ) -> Tuple[Union[BaseModel, PeftModel], BaseProcessor]:
         """
         Loads a model with LoRA adapters
@@ -46,7 +59,7 @@ class EngineModelLoader(BaseModelLoader):
         tf_logging.set_verbosity_error()
 
         if isinstance(config_input, str):
-            config: ModelConfigWrapper = load_configuration_from_yaml_file(config_input)
+            config: Config = Config.from_yaml(config_input)
         else:
             config = config_input
 
@@ -94,25 +107,24 @@ class EngineModelLoader(BaseModelLoader):
 
         return model_to_use, processor
 
-class EngineWrapper(BaseEngineWrapper):
 
+class EngineWrapper(BaseEngineWrapper):
     """
     Class for wrapping engine models
     """
+
     def __init__(
         self,
         model: Any,
         processor: BaseProcessor,
-        config: ModelConfigWrapper,
+        config: Config,
     ) -> None:
 
         self.model = model
         self.processor = processor
-        self.config: ModelConfigWrapper = config
+        self.config: Config = config
 
-    def encode_multimodal_document_images(
-        self, images: List[Any], batch_size: int = 4
-    ) -> torch.Tensor:
+    def encode_multimodal_document_images(self, images: List[Any], batch_size: int = 4) -> torch.Tensor:
         """
         Encodes a list of images into embeddings using sub-batching to prevent OOM errors on large documents.
         """
@@ -126,8 +138,7 @@ class EngineWrapper(BaseEngineWrapper):
             batch_images = images[i : i + batch_size]
             processed_inputs = self.processor.process_images(batch_images)
             processed_inputs = {
-                k: v.to(target_device) if isinstance(v, torch.Tensor) else v
-                for k, v in processed_inputs.items()
+                k: v.to(target_device) if isinstance(v, torch.Tensor) else v for k, v in processed_inputs.items()
             }
 
             with torch.inference_mode():
@@ -145,30 +156,37 @@ class EngineWrapper(BaseEngineWrapper):
         """
         if not texts:
             raise ValueError("Input text list cannot be empty.")
-   
+
         processed_inputs = self.processor.process_texts(texts)
         target_device = next(self.model.parameters()).device
         processed_inputs = {
-            k: v.to(target_device) if isinstance(v, torch.Tensor) else v
-            for k, v in processed_inputs.items()
+            k: v.to(target_device) if isinstance(v, torch.Tensor) else v for k, v in processed_inputs.items()
         }
-        
+
         with torch.inference_mode():
             query_embeddings: torch.Tensor = self.model(**processed_inputs)
-        
+
         return query_embeddings
+
+
+def initialize_engine(
+    config: Config,
+    loader_class: Optional[Type[BaseModelLoader]] = None,
+) -> EngineWrapper:
+    """
+    Initializes an engine directly from an injected Config instance.
+    """
+    target_loader = loader_class or EngineModelLoader
+    model, processor = target_loader.load_model_and_processor(config)
+    return EngineWrapper(model=model, processor=processor, config=config)
+
 
 def initialize_engine_from_yaml_config(
     config_filepath: str = "config.yaml",
     loader_class: Optional[Type[BaseModelLoader]] = None,
 ) -> EngineWrapper:
     """
-    Initializes an engine from a YAML configuration
+    Initializes an engine from a YAML configuration file path.
     """
-    config: ModelConfigWrapper = load_configuration_from_yaml_file(config_filepath)
-
-    target_loader = loader_class or EngineModelLoader
-    
-    model, processor = target_loader.load_model_and_processor(config)
-    
-    return EngineWrapper(model=model, processor=processor, config=config)
+    config: Config = Config.from_yaml(config_filepath)
+    return initialize_engine(config=config, loader_class=loader_class)

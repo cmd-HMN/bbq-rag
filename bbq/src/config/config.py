@@ -1,79 +1,62 @@
+from __future__ import annotations
+
 import os
-import yaml
 import warnings
-import traceback
-from typing import Dict, Any, Optional
+from dataclasses import asdict, dataclass, fields
+from typing import Any, Dict, Optional
+
+import yaml
+
 from bbq.src.common.errors import ConfigFNFWarning, ConfigParseError
+from bbq.src.utils.futils import get_system_cache_dir
 
-def get_system_cache_dir(subfolder: str = "") -> str:
+
+@dataclass
+class Config:
     """
-    Returns the system default user cache directory for bbq.
-    Respects XDG_CACHE_HOME if set, defaulting to ~/.cache/bbq.
+    BBQ configuration class that encapsulates various settings for the application.
     """
-    cache_base = os.environ.get("XDG_CACHE_HOME")
-    if not cache_base:
-        cache_base = os.path.expanduser("~/.cache")
-    bbq_cache_dir = os.path.join(cache_base, "bbq")
-    if subfolder:
-        return os.path.join(bbq_cache_dir, subfolder)
-    return bbq_cache_dir
 
+    base_model_id: str = "HuggingFaceTB/SmolVLM-256M-Instruct"
+    lora_adapter_id: str = "vidore/colSmol-256M"
+    embedding_dim: int = 128
+    device: str = "auto"
+    torch_dtype: str = "bfloat16"
+    mask_non_image_embeddings: bool = False
+    visual_prompt_command: str = "Explaing the image."
+    watch_folder_path: str = "data/watch"
+    embeddings_output_path: Optional[str] = None
+    sqlite_db_path: Optional[str] = None
+    pdf_render_dpi: int = 150
+    gemini_api_key: Optional[str] = None
+    gemini_model: str = "gemini-3.6-flash"
+    rag_top_k: int = 3
+    quantization: Optional[str] = "f32"
 
-class ModelConfigWrapper:
-    """
-    Wrapper class for model configuration.
+    def __post_init__(self) -> None:
+        if not self.base_model_id:
+            raise ValueError("base_model_id cannot be empty in configuration.")
+        if self.embedding_dim is not None:
+            self.embedding_dim = int(self.embedding_dim)
+        if self.pdf_render_dpi is not None:
+            self.pdf_render_dpi = int(self.pdf_render_dpi)
+        if self.rag_top_k is not None:
+            self.rag_top_k = int(self.rag_top_k)
 
-    Args:
-        base_model_id (str): The base model ID.
-        lora_adapter_id (str): The LoRA adapter ID.
-        embedding_dim (int): The embedding dimension.
-        device (str): The device to use.
-        torch_dtype (str): The data type.
-        mask_non_image_embeddings (bool): Whether to mask non-image embeddings.
-        visual_prompt_command (str): The visual prompt command.
-    """
-    def __init__(
-        self,
-        base_model_id: str = "HuggingFaceTB/SmolVLM-256M-Instruct",
-        lora_adapter_id: str = "vidore/colSmol-256M",
-        embedding_dim: int = 128,
-        device: str = "auto",
-        torch_dtype: str = "bfloat16",
-        mask_non_image_embeddings: bool = False,
-        visual_prompt_command: str = "What is written on the image.",
-        watch_folder_path: str = "data/watch",
-        embeddings_output_path: Optional[str] = None,
-        sqlite_db_path: Optional[str] = None,
-        pdf_render_dpi: int = 150,
-        gemini_api_key: Optional[str] = None,
-        gemini_model: str = "gemini-3.6-flash",
-        rag_top_k: int = 3,
-    ) -> None:
-        self.base_model_id: str = base_model_id
-        self.lora_adapter_id: str = lora_adapter_id
-        self.embedding_dim: int = embedding_dim
-        self.device: str = device
-        self.torch_dtype: str = torch_dtype
-        self.mask_non_image_embeddings: bool = mask_non_image_embeddings
-        self.visual_prompt_command: str = visual_prompt_command
-        self.watch_folder_path: str = watch_folder_path
-        self.embeddings_output_path: str = embeddings_output_path or get_system_cache_dir("embeddings")
-        self.sqlite_db_path: str = sqlite_db_path or get_system_cache_dir("tracker.db")
-        self.pdf_render_dpi: int = pdf_render_dpi
-        self.gemini_api_key: Optional[str] = (
-            gemini_api_key
-            or os.environ.get("GEMINI_API_KEY")
-            or os.environ.get("GOOGLE_API_KEY")
-        )
-        self.gemini_model: str = gemini_model
-        self.rag_top_k: int = rag_top_k
+        if not self.embeddings_output_path:
+            self.embeddings_output_path = get_system_cache_dir("embeddings")
+        if not self.sqlite_db_path:
+            self.sqlite_db_path = get_system_cache_dir("tracker.db")
 
-    def get_gemini_client(self):
-        """
-        Instantiates and returns a GeminiClient configured with this config's settings.
-        """
-        from bbq.src.client.gemini import GeminiClient
-        return GeminiClient(api_key=self.gemini_api_key, model=self.gemini_model)
+        if self.quantization:
+            self.quantization = str(self.quantization).strip().lower()
+
+        if self.gemini_api_key:
+            self.gemini_api_key = str(self.gemini_api_key).strip() or None
+        if not self.gemini_api_key:
+            self.gemini_api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get(
+                "GOOGLE_API_KEY"
+            )
 
     def format_visual_prompt_prefix(self) -> str:
         """
@@ -85,157 +68,61 @@ class ModelConfigWrapper:
 
     def convert_to_dictionary_format(self) -> Dict[str, Any]:
         """
-        Converts the configuration to a dictionary format.
+        Converts the configuration to a dictionary format without exposing secret API keys.
         """
-        return {
-            "base_model_id": self.base_model_id,
-            "lora_adapter_id": self.lora_adapter_id,
-            "embedding_dim": self.embedding_dim,
-            "device": self.device,
-            "torch_dtype": self.torch_dtype,
-            "mask_non_image_embeddings": self.mask_non_image_embeddings,
-            "visual_prompt_command": self.visual_prompt_command,
-            "visual_prompt_prefix": self.format_visual_prompt_prefix(),
-            "watch_folder_path": self.watch_folder_path,
-            "embeddings_output_path": self.embeddings_output_path,
-            "sqlite_db_path": self.sqlite_db_path,
-            "pdf_render_dpi": self.pdf_render_dpi,
-            "gemini_api_key_configured": bool(self.gemini_api_key and self.gemini_api_key.strip()),
-            "gemini_model": self.gemini_model,
-            "rag_top_k": self.rag_top_k,
-        }
-
-def load_configuration_from_yaml_file(
-    config_filepath: str = "config.yaml",
-) -> ModelConfigWrapper:
-    """
-    Load configuration from a YAML file.
-
-    Args:
-        config_filepath (str): The path to the YAML configuration file.
-
-    Returns:
-        ModelConfigWrapper: An instance of ModelConfigWrapper containing the loaded configuration.
-    """
-
-    # Check if the configuration file exists
-
-    if not os.path.exists(config_filepath):
-        warning_msg: str = (
-            f"Configuration file not found at path: '{config_filepath}'. "
-            "Proceeding with default settings."
+        data = asdict(self)
+        data.pop("gemini_api_key", None)
+        data["gemini_api_key_configured"] = bool(
+            self.gemini_api_key and self.gemini_api_key.strip()
         )
-        traceback.print_stack(limit=3)
-        warnings.warn(warning_msg, category=ConfigFNFWarning, stacklevel=2)
-        return ModelConfigWrapper()
+        data["visual_prompt_prefix"] = self.format_visual_prompt_prefix()
+        return data
 
-    try:
-        with open(config_filepath, "r", encoding="utf-8") as file_stream:
-            parsed_yaml_data: Dict[str, Any] = yaml.safe_load(file_stream) or {}
-    except Exception as exception_instance:
-        traceback.print_exc()
-        raise ConfigParseError(
-            f"Failed to parse YAML configuration file: {exception_instance}"
-        ) from exception_instance
+    @classmethod
+    def from_yaml(cls, config_filepath: str = "config.yaml") -> Config:
+        """
+        Load configuration from a YAML file.
+        """
+        resolved_path = config_filepath
+        if not os.path.exists(resolved_path):
+            candidates = [
+                os.path.join(os.getcwd(), config_filepath),
+                os.path.join(
+                    os.path.dirname(
+                        os.path.dirname(
+                            os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                        )
+                    ),
+                    config_filepath,
+                ),
+            ]
+            for candidate in candidates:
+                if os.path.exists(candidate):
+                    resolved_path = candidate
+                    break
 
-    base_model_id: str = str(
-        parsed_yaml_data.get("base_model_id", "HuggingFaceTB/SmolVLM-256M-Instruct")
-    )
-    
-    lora_adapter_id: str = str(
-        parsed_yaml_data.get("lora_adapter_id", "vidore/colSmol-256M")
-    )
-    
-    embedding_dim: int = int(parsed_yaml_data.get("embedding_dim", 128))
-    
-    device: str = str(parsed_yaml_data.get("device", "auto"))
-    
-    torch_dtype: str = str(parsed_yaml_data.get("torch_dtype", "bfloat16"))
-    
-    mask_non_image_embeddings: bool = bool(
-        parsed_yaml_data.get("mask_non_image_embeddings", False)
-    )
-    
-    visual_prompt_command: str = str(
-        parsed_yaml_data.get("visual_prompt_command", "What is written on the image.")
-    )
-    
-    watch_folder_path: str = str(
-        parsed_yaml_data.get("watch_folder_path", "data/watch")
-    )
-    
-    embeddings_output_path: str = str(
-        parsed_yaml_data.get("embeddings_output_path", get_system_cache_dir("embeddings"))
-    )
-    
-    sqlite_db_path: str = str(
-        parsed_yaml_data.get("sqlite_db_path", get_system_cache_dir("tracker.db"))
-    )
-    
-    pdf_render_dpi: int = int(parsed_yaml_data.get("pdf_render_dpi", 150))
+        if not os.path.exists(resolved_path):
+            warnings.warn(
+                f"Configuration file not found at path: '{config_filepath}'. Proceeding with default settings.",
+                category=ConfigFNFWarning,
+                stacklevel=2,
+            )
+            return cls()
 
-    gemini_api_key: Optional[str] = parsed_yaml_data.get("gemini_api_key")
-    if gemini_api_key is not None:
-        gemini_api_key = str(gemini_api_key).strip() or None
-    else:
-        gemini_api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+        config_filepath = resolved_path
 
-    gemini_model: str = str(parsed_yaml_data.get("gemini_model", "gemini-3.6-flash"))
-    rag_top_k: int = int(parsed_yaml_data.get("rag_top_k", 3))
+        try:
+            with open(config_filepath, "r", encoding="utf-8") as file_stream:
+                parsed_yaml_data: Dict[str, Any] = yaml.safe_load(file_stream) or {}
+        except Exception as exception_instance:
+            raise ConfigParseError(
+                f"Failed to parse YAML configuration file: {exception_instance}"
+            ) from exception_instance
 
-    if not base_model_id:
-        raise ValueError("base_model_id cannot be empty in configuration.")
-
-    return ModelConfigWrapper(
-        base_model_id=base_model_id,
-        lora_adapter_id=lora_adapter_id,
-        embedding_dim=embedding_dim,
-        device=device,
-        torch_dtype=torch_dtype,
-        mask_non_image_embeddings=mask_non_image_embeddings,
-        visual_prompt_command=visual_prompt_command,
-        watch_folder_path=watch_folder_path,
-        embeddings_output_path=embeddings_output_path,
-        sqlite_db_path=sqlite_db_path,
-        pdf_render_dpi=pdf_render_dpi,
-        gemini_api_key=gemini_api_key,
-        gemini_model=gemini_model,
-        rag_top_k=rag_top_k,
-    )
-
-def determine_target_torch_device(device_preference: str = "auto") -> str:
-    """
-    Determine the target torch device based on the provided device preference.
-
-    Args:
-        device_preference (str): The device preference, either "auto" or a specific device name.
-
-    Returns:
-        str: The target torch device.
-    """
-    import torch
-    if device_preference == "auto":
-        return "cuda" if torch.cuda.is_available() else "cpu"
-    return device_preference
-
-def resolve_torch_data_type(
-    dtype_name: str = "bfloat16", target_device: str = "cpu"
-) -> Any:
-    """
-    Resolve the torch data type based on the provided dtype name and target device.
-
-    Args:
-        dtype_name (str): The data type name, either "bfloat16" or "float16".
-        target_device (str): The target device, either "cpu" or "cuda".
-
-    Returns:
-        torch.dtype: The resolved torch data type.
-    """
-    import torch
-    if target_device == "cpu":
-        return torch.float32
-    if dtype_name == "bfloat16":
-        return torch.bfloat16
-    elif dtype_name == "float16":
-        return torch.float16
-    return torch.float32
+        valid_keys = {f.name for f in fields(cls)}
+        filtered_kwargs = {
+            k: v
+            for k, v in parsed_yaml_data.items()
+            if k in valid_keys and v is not None
+        }
+        return cls(**filtered_kwargs)

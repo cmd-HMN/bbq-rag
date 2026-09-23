@@ -8,56 +8,14 @@ Comprehensive integration tests verifying:
 import os
 import shutil
 import tempfile
+
+import maxsimd
 import numpy as np
 import pytest
 import torch
 
-from bbq.src.config import ModelConfigWrapper, get_system_cache_dir
+from bbq.src.server import create_bbq_fastapi_app, query_indexed_documents
 from bbq.src.storage.sql import SqlliteDB
-from bbq.src.server import query_indexed_documents, create_bbq_fastapi_app
-from bbq.src.client import BBQClient
-import maxsimd
-
-
-def test_system_cache_path():
-    """Verify that default cache paths use user system cache directory (~/.cache/bbq)."""
-    system_cache = get_system_cache_dir()
-    assert ".cache/bbq" in system_cache or "bbq" in system_cache
-    assert not system_cache.startswith("./.cache")
-
-    config = ModelConfigWrapper()
-    assert config.embeddings_output_path == get_system_cache_dir("embeddings")
-    assert config.sqlite_db_path == get_system_cache_dir("tracker.db")
-    assert config.gemini_model == "gemini-3.6-flash"
-    assert config.rag_top_k == 3
-
-    tracker = SqlliteDB()
-    assert tracker.db_filepath == get_system_cache_dir("tracker.db")
-
-
-def test_config_gemini_settings_and_client():
-    """Verify Gemini configuration in ModelConfigWrapper and client initialization."""
-    from bbq.src.config import load_configuration_from_yaml_file
-
-    config = ModelConfigWrapper(
-        gemini_api_key="TEST_API_KEY_ABC",
-        gemini_model="gemini-2.0-flash",
-        rag_top_k=3,
-    )
-    assert config.gemini_api_key == "TEST_API_KEY_ABC"
-    assert config.gemini_model == "gemini-2.0-flash"
-    assert config.rag_top_k == 3
-
-    dict_format = config.convert_to_dictionary_format()
-    assert dict_format["gemini_api_key_configured"] is True
-    assert dict_format["gemini_model"] == "gemini-2.0-flash"
-    assert dict_format["rag_top_k"] == 3
-
-    gemini_client = config.get_gemini_client()
-    assert gemini_client.api_key == "TEST_API_KEY_ABC"
-    assert gemini_client.model == "gemini-2.0-flash"
-    assert gemini_client.is_available() is True
-
 
 
 def test_maxsim_ragged_flat_functionality():
@@ -143,6 +101,7 @@ def test_query_retrieval_pipeline():
             class MockConfig:
                 base_model_id = "test-model"
                 watch_folder_path = temp_dir
+
             config = MockConfig()
             model = torch.nn.Linear(10, 10)
 
@@ -151,7 +110,9 @@ def test_query_retrieval_pipeline():
                 return torch.randn(1, 4, 128)
 
         mock_engine = MockEngine()
-        results = query_indexed_documents("test search query", mock_engine, tracker, top_k=2)
+        results = query_indexed_documents(
+            "test search query", mock_engine, tracker, top_k=2
+        )
 
         assert len(results) == 2
         assert results[0]["file_path"] == pdf_path
@@ -166,8 +127,9 @@ def test_query_retrieval_pipeline():
 def test_single_page_image_extraction():
     """Verify extracting a single PDF page to a PIL Image."""
     import pymupdf
-    from bbq.src.utils.pdf_utils import extract_single_pdf_page_image
     from PIL import Image
+
+    from bbq.src.utils.pdf_utils import extract_single_pdf_page_image
 
     temp_dir = tempfile.mkdtemp()
     try:
@@ -187,8 +149,9 @@ def test_single_page_image_extraction():
 
 def test_gemini_client_and_fallback():
     """Verify GeminiClient behavior with no key, invalid key, and image encoding."""
-    from bbq.src.client.gemini import GeminiClient
     from PIL import Image
+
+    from bbq.src.client.gemini import GeminiClient
 
     # 1. No key
     client_no_key = GeminiClient(api_key="")
@@ -280,7 +243,9 @@ def test_quantization_qi8_and_quantized_maxsim():
     assert d_scale.dtype == torch.float32
 
     # Call maxsim with quantized tensors
-    scores_torch = maxsimd.maxsim(q_val, d_val, q_scale=q_scale, d_scale=d_scale, jobs=-1)
+    scores_torch = maxsimd.maxsim(
+        q_val, d_val, q_scale=q_scale, d_scale=d_scale, jobs=-1
+    )
     assert len(scores_torch) == 4
     for s in scores_torch:
         assert isinstance(s, float)
@@ -303,11 +268,9 @@ def test_quantization_qi8_and_quantized_maxsim():
     assert d_np_scale.shape == (20, dim // 32)
     assert d_np_scale.dtype == np.float32
 
-    scores_np = maxsimd.maxsim(q_np_val, d_np_val, q_scale=q_np_scale, d_scale=d_np_scale)
+    scores_np = maxsimd.maxsim(
+        q_np_val, d_np_val, q_scale=q_np_scale, d_scale=d_np_scale
+    )
     assert len(scores_np) == 1
     assert isinstance(scores_np[0], float)
     assert np.isfinite(scores_np[0])
-
-
-
-

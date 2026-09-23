@@ -51,7 +51,7 @@ pip install -e ".[benchmark]"
 maturin develop --release
 ```
 
-Benchmark dependencies include `tqdm`, `matplotlib`, `jinja2`, `datasets`, and `plotly`.
+Benchmark dependencies include `matplotlib`, `jinja2`, `datasets`, and `plotly`.
 
 ---
 

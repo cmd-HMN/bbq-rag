@@ -2,15 +2,14 @@ import logging
 import os
 import signal
 import sys
-import time
 import threading
+import time
 from typing import Any, Optional, Tuple
 
 from rich.console import Console
 
 from bbq.src.config import (
-    ModelConfigWrapper,
-    load_configuration_from_yaml_file,
+    Config,
 )
 from bbq.src.server.app import create_bbq_fastapi_app, run_http_server_in_thread
 from bbq.src.server.ingestion import (
@@ -41,6 +40,7 @@ class BBQServer:
 
     def __init__(
         self,
+        config: Optional[Config] = None,
         config_filepath: str = "config.yaml",
         host: str = "0.0.0.0",
         port: int = 8000,
@@ -51,7 +51,7 @@ class BBQServer:
 
         self.console = Console()
         self.bbq_logger = configure_server_logging()
-        self.config: ModelConfigWrapper = load_configuration_from_yaml_file(config_filepath)
+        self.config: Config = config if config is not None else Config.from_yaml(config_filepath)
         self.tracker = SqlliteDB(db_filepath=self.config.sqlite_db_path)
 
         self.engine: Optional[Any] = None
@@ -70,9 +70,9 @@ class BBQServer:
 
         def _loader():
             try:
-                from bbq.src.utils.model_loader import initialize_engine_from_yaml_config
+                from bbq.src.utils.model_loader import initialize_engine
 
-                self.engine = initialize_engine_from_yaml_config(self.config_filepath)
+                self.engine = initialize_engine(self.config)
                 self._is_ready = True
                 logger.info("Engine model and processor loaded successfully.")
             except Exception as exc:
@@ -196,7 +196,7 @@ class BBQServer:
 
 def execute_background_server_pipeline(
     config_filepath: str,
-    config: ModelConfigWrapper,
+    config: Config,
     tracker: SqlliteDB,
     console: Console,
     host: str = "0.0.0.0",
@@ -209,12 +209,13 @@ def execute_background_server_pipeline(
 
 
 def start_document_indexing_server(
+    config: Optional[Config] = None,
     config_filepath: str = "config.yaml",
     host: str = "0.0.0.0",
     port: int = 8000,
 ) -> None:
     """Main entrypoint for starting the document indexing server."""
-    server = BBQServer(config_filepath=config_filepath, host=host, port=port)
+    server = BBQServer(config=config, config_filepath=config_filepath, host=host, port=port)
     try:
         server.start()
         while True:

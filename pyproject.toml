@@ -3,7 +3,7 @@ requires = ["maturin>=1.15.0,<2.0"]
 build-backend = "maturin"
 
 [project]
-name = "bbq-rag"
+name = "bbq"
 requires-python = ">=3.8"
 license = { text = "MIT" }
 classifiers = [
@@ -18,9 +18,11 @@ dependencies = [
 ]
 dynamic = ["version"]
 
+[project.scripts]
+bbq = "bbq.src.main:main"
+
 [project.optional-dependencies]
 benchmark = [
-  "tqdm>=4.70.1",
   "matplotlib>=3.10.9",
   "jinja2>=3.1.6",
   "datasets>=5.0.1",
@@ -31,7 +33,6 @@ dev = ["pytest>=9.1.1"]
 [dependency-groups]
 dev = ["pytest>=9.1.1"]
 benchmark = [
-  "tqdm>=4.70.1",
   "matplotlib>=3.10.9",
   "jinja2>=3.1.6",
   "datasets>=5.0.1",
@@ -43,8 +44,8 @@ testpaths = ["tests"]
 pythonpath = ["."]
 
 [tool.maturin]
-module-name = "maxsimd"
-python-source = "bbq"
+module-name = "bbq.maxsimd.maxsimd"
+python-source = "."
 
 [tool.pyright]
 extraPaths = ["bbq"]

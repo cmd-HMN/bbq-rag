@@ -107,6 +107,10 @@ rag_top_k: 3
 Launch the document indexing server. It will monitor `data/watch/` for new PDF files and automatically compute embeddings:
 
 ```bash
+# Using the bbq CLI command
+bbq server --config config.yaml
+
+# Or via Python module
 python -m bbq.src.main server --config config.yaml
 ```
 
@@ -115,13 +119,31 @@ python -m bbq.src.main server --config config.yaml
 Search indexed documents from the command line:
 
 ```bash
-# Query top 3 matching pages
-python -m bbq.src.main query "What was the operating margin in Q3?" --top-k 3
+# Fetch top 10 matching pages (prints ASCII BBQ banner on run)
+bbq client "What was the operating margin in Q3?"
+# Or: python -m bbq.src.main query "What was the operating margin in Q3?"
 
-# Query with Gemini Multimodal RAG (generates grounded answer from top 3 page images)
+# Fetch without ASCII logo banner
+bbq client --without-logo "What was the operating margin in Q3?"
+
+# Query with Gemini Multimodal LLM (displays live cooking spinner and multimodal answer)
 export GEMINI_API_KEY="your-gemini-api-key"
-python -m bbq.src.main query "Summarize the revenue growth" --top-k 3
+bbq client "Summarize the revenue growth" --use-llm
+
+# Continuous interactive query prompt loop (--infinite / -inf)
+bbq client --infinite
+# Or with LLM cooking enabled:
+bbq client --infinite --use-llm
+
+# Run directly via the client module
+python -m bbq.src.client --infinite --use-llm
 ```
+
+In `--infinite` mode, an interactive prompt (`bbq[query] >> `) appears for continuous querying:
+- Type any query to search.
+- Type `help` or `?` to show the commands menu.
+- Type `clear` or `cls` to clear the terminal screen.
+- Type `q`, `quit`, or `exit` (or `Ctrl+C`) to quit.
 
 If no Gemini API key is provided or the API is unavailable, the client automatically displays the matching document pages without crashing.
 
@@ -207,7 +229,3 @@ We express our sincere thanks to the original authors and maintainers for their 
 For full project lineage, paper citations, and intellectual property notices, see [ABOUT.md](ABOUT.md).
 
 ---
-
-## Disclaimer
-
-This project, its documentation, and parts of its codebase and benchmarks were developed with the assistance of AI tools. As an evolving early-stage project, this README and documentation may contain preliminary assumptions or specifications that are actively being refined. Future commits will continuously audit, validate, and update these details to ensure ongoing accuracy, correctness, and benchmarking rigor. No warranties or guarantees of fitness for a particular purpose are provided.

@@ -1,4 +1,4 @@
-name: maxsimd
+name: CI
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
     branches: [ main ]
 
 jobs:
-  maxsimd:
+  test:
     name: Build & Test (Rust + Python)
     runs-on: ubuntu-latest
 
@@ -32,7 +32,7 @@ jobs:
         with:
           python-version: "3.13"
 
-      # 5. Run Rust Cargo Tests (with dev features enabled for MKL/BLAS)
+      # 5. Run Rust Cargo Tests
       - name: Run Cargo Tests
         run: |
           cargo test --verbose
@@ -43,36 +43,26 @@ jobs:
           python -m pip install --upgrade pip
           pip install maturin numpy pytest
 
-      # 7. Build and install maxsimd CPython extension via Maturin
-      - name: Build and install maxsimd (Release)
+      # 7. Build and install BBQ package via pip
+      - name: Build and install BBQ (Release)
         run: |
           pip install .
 
-      # 8. Check version and exported functions
-      - name: Verify maxsimd version and exports
+      # 8. Check BBQ version and CLI
+      - name: Verify BBQ version and CLI
         run: |
           python -c "
-          import maxsimd
-          version = getattr(maxsimd, '__version__', 'N/A')
+          import bbq
+          version = getattr(bbq, '__version__', 'N/A')
           print('=' * 50)
-          print(f'MaxSimD Version: {version}')
-          print('Exported functions:', [item for item in dir(maxsimd) if not item.startswith('__')])
+          print(f'BBQ Version: {version}')
           print('=' * 50)
+          assert version != 'N/A'
           "
+          bbq --version
 
-      # 9. Run a fast MaxSim computation smoke test
-      - name: Run MaxSim Python smoke test
+      # 9. Run Python unit tests
+      - name: Run Pytest test suite
         run: |
-          python -c "
-          import maxsimd
-          import numpy as np
+          pytest
 
-          # 32 query tokens, 256 document tokens, 128 dimension
-          q = np.random.randn(32, 128).astype(np.float32)
-          d = np.random.randn(256, 128).astype(np.float32)
-          
-          score = maxsimd.maxsim(q, d)
-          print('Calculated MaxSim score successfully:', score)
-          assert len(score) == 1
-          assert isinstance(score[0], float)
-          "
