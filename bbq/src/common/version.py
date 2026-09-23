@@ -32,7 +32,7 @@ def _read_project_version() -> str:
 
         return version("bbq")
     except Exception:
-        return "0.1.3-alpha"
+        return "0.1.4-alpha"
 
 
 # Global package version directly read from pyproject.toml / Cargo.toml
