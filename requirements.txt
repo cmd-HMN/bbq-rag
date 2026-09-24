@@ -1,6 +1,6 @@
 torch>=2.14.0
 transformers>=5.17.0
-peft>=0.20.0
+peft>=0.21.0
 safetensors>=0.8.0
 
 pymupdf>=1.28.2
