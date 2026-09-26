@@ -560,6 +560,10 @@ def test_bbq_server_print_logo(capsys, mock_config):
     assert "SERVER" in out
 
 
+@pytest.mark.skipif(
+    bool(os.environ.get("CI")) or bool(os.environ.get("GITHUB_ACTIONS")),
+    reason="Skipped in CI: requires full model environment with peft",
+)
 @patch("bbq.src.utils.model_loader.initialize_engine")
 def test_bbq_server_load_engine_threaded(mock_init_engine, mock_config):
     """Verify load_engine_threaded initializes engine and sets _is_ready."""
@@ -571,6 +575,10 @@ def test_bbq_server_load_engine_threaded(mock_init_engine, mock_config):
     assert server.engine is not None
 
 
+@pytest.mark.skipif(
+    bool(os.environ.get("CI")) or bool(os.environ.get("GITHUB_ACTIONS")),
+    reason="Skipped in CI: requires full model environment with peft",
+)
 @patch("bbq.src.server.server.start_pdf_folder_watcher")
 @patch("bbq.src.server.server.run_http_server_in_thread")
 @patch("bbq.src.server.server.scan_and_ingest_existing_pdf_folder")

@@ -1,5 +1,4 @@
 from typing import Any, List, Optional, Tuple, Type, Union
-
 import torch
 
 try:
@@ -11,7 +10,7 @@ except ImportError:
 try:
     from transformers import logging as tf_logging
 except ImportError:
-    import logging as tf_logging  # type: ignore
+    tf_logging = None  # type: ignore
 
 from bbq.src.common.base import (
     BaseEngineWrapper,
@@ -41,13 +40,12 @@ logging.getLogger("bitsandbytes").setLevel(logging.ERROR)
 warnings.filterwarnings("ignore", message=".*BNB_CUDA_VERSION.*")
 warnings.filterwarnings("ignore", module=".*bitsandbytes.*")
 
-if hasattr(tf_logging, "set_verbosity_error"):
+if tf_logging is not None:
     tf_logging.set_verbosity_error()
-try:
-    if hasattr(tf_logging, "disable_progress_bar"):
+    try:
         tf_logging.disable_progress_bar()
-except Exception:
-    pass
+    except Exception:
+        pass
 
 
 def determine_target_torch_device(device_preference: str = "auto") -> str:
