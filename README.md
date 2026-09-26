@@ -5,12 +5,12 @@
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-0284c7)](https://www.python.org/)
 [![Rust](https://img.shields.io/badge/rust-1.75%2B-ea580c.svg)](https://www.rust-lang.org/)
-[![CPU](<https://img.shields.io/badge/CPU-x86__64%20(AVX2%20%2B%20FMA)-16a34a.svg>)](#performance--benchmarks)
-[![Model](https://img.shields.io/badge/Model-ColPali%20%2F%20SmolVLM-7c3aed.svg)](#key-features)
-[![FFI](https://img.shields.io/badge/FFI-PyO3%200.29-e11d48.svg)](https://pyo3.rs/)
-[![Repo Size](https://img.shields.io/badge/repo%20size-~3.2%20MB-0ea5e9.svg)](#)
-[![Environment](https://img.shields.io/badge/environment-~2.5--3.0%20GB-8b5cf6.svg)](#)
+[![SIMD](https://img.shields.io/badge/SIMD-AVX2%20%2B%20FMA-16a34a.svg)](#performance--benchmarks)
+[![VLM](https://img.shields.io/badge/VLM-ColPali%20%2F%20colSmol-7c3aed.svg)](#quickstart--usage)
+[![Scoring](https://img.shields.io/badge/Scoring-MaxSim%20Multi--Vector-0ea5e9.svg)](#performance--benchmarks)
+[![FFI](https://img.shields.io/badge/FFI-PyO3%20Zero--Copy-e11d48.svg)](https://pyo3.rs/)
 [![Throughput](https://img.shields.io/badge/throughput->%20150k%20pages/s-f97316.svg)](#performance--benchmarks)
+[![Multimodal RAG](https://img.shields.io/badge/LLM-Google%20Gemini-4285f4.svg)](#quickstart--usage)
 [![About](https://img.shields.io/badge/Lineage-ColPali%20%26%20maxsim--cpu-f59e0b.svg)](ABOUT.md)
 
 </div>
@@ -21,62 +21,32 @@ It provides a complete end-to-end local RAG pipeline: an automated PDF directory
 
 ---
 
-## Key Features
-
-- **Fused AVX2/FMA SIMD MaxSim Engine**: 4-way query unrolled SIMD dot-product pipeline with in-register maximum tracking written in Rust (`maxsimd`), eliminating intermediate similarity matrix allocation and cutting memory load traffic by 27x.
-- **Adaptive Multi-Threaded Parallelism**: Dynamic execution routing that runs small batches sequentially on the main thread to eliminate work-stealing overhead, and switches automatically to Rayon chunked work pools for large multi-page collections.
-- **Unified Zero-Copy FFI**: A single unified Python entry point (`maxsimd.maxsim`) accepting contiguous NumPy arrays and PyTorch tensors directly with zero memory copying or overhead.
-- **Vision-Language Indexing Server**: Automated folder monitoring (`data/watch/`), background PDF page rasterization at 150 DPI via PyMuPDF, and persistent SQLite metadata and multi-vector embedding storage.
-- **Client-Side Gemini Multimodal RAG**: Seamless grounded answer synthesis with Google Gemini (`gemini-2.5-flash` / `gemini-2.0-flash`) over top retrieved visual pages, with automatic fallback to page viewing when offline or without an API key.
-- **Production Benchmarking Suite**: Comprehensive micro- and macro-benchmark suites with CLI controls (`--suite maxsimd` for throughput scaling, `--suite vidore` evaluating retrieval quality, QPS, and numerical parity against PyTorch across 10 official ViDoRe datasets).
-
----
-
 ## Performance & Benchmarks
 
-> For in-depth benchmark comparisons, multi-baseline analysis, and full ViDoRe multimodal retrieval evaluations, see [**MORE INFO ON THE BENCHMARK README**](benchmarks/README.md).
+BBQ-RAG's fused AVX2/FMA Rust SIMD kernel evaluates over 150,000 document pages per second on standard multi-core CPUs with zero intermediate heap allocations. For detailed methodology, multi-baseline comparisons, and ViDoRe multimodal retrieval evaluations, see the [benchmark report](benchmarks/README.md).
 
 ![MaxSim SIMD Throughput Scaling](assets/b1.png)
 
 ## Installation
 
-### Prerequisites
+> [!IMPORTANT]
+> **Hardware Support: x86_64 with FMA Only**  
+> BBQ-RAG's native SIMD compute engine (`maxsimd`) is strictly optimized for **x86_64 (64-bit AMD / Intel)** CPUs with **FMA (Fused Multiply-Add)** and **AVX2** vector instruction sets.  
+> - **Supported**: 64-bit x86 CPUs with FMA (Intel Haswell / Core 4th Gen+ and AMD Piledriver / Zen+).
+> - **Unsupported**: ARM architectures (e.g., Apple Silicon M1/M2/M3/M4, AWS Graviton, Raspberry Pi) and legacy x86 CPUs lacking FMA support.
+> 
+> Running `pip install .` automatically triggers an architecture and CPU instruction check. If your machine does not meet the hardware requirements, the installation will halt and inform you that BBQ-RAG cannot be run on your machine.
 
-- Python 3.10 or higher
-- Rust 1.75 or higher (with `cargo`)
-- x86_64 CPU supporting AVX2 and FMA instructions
-
-### Step 1: Clone Repository & Create Virtual Environment
+Install BBQ-RAG and compile the native Rust SIMD extension in one step:
 
 ```bash
 git clone https://github.com/cmd-HMN/bbq-rag.git
 cd bbq-rag
 
-python3 -m venv .venv
-source .venv/bin/activate
+pip install .
 ```
 
-### Step 2: Install Dependencies
-
-```bash
-pip install --upgrade pip
-pip install -r requirements.txt
-```
-
-### Step 3: Compile Rust Extension
-
-Build the high-performance release binary using `maturin`:
-
-```bash
-maturin develop --release
-```
-
-Or build a redistributable wheel:
-
-```bash
-maturin build --release -o dist/
-pip install dist/bbq_rag-*.whl
-```
+> **Requirements**: Python 3.10+, Rust 1.75+ (with `cargo`), and an x86_64 CPU supporting AVX2 and FMA instructions.
 
 ---
 
@@ -87,19 +57,43 @@ pip install dist/bbq_rag-*.whl
 Edit `config.yaml` to set your model IDs, watch directory, and Gemini preferences:
 
 ```yaml
+# only inference supported
 base_model_id: "HuggingFaceTB/SmolVLM-256M-Instruct"
+# only support this model
 lora_adapter_id: "vidore/colSmol-256M"
+
+# change the embedding_dim if you want
 embedding_dim: 128
+
+# can be auto selected
 device: "auto"
+
+# data type
 torch_dtype: "bfloat16"
 
+# masking for images in the model
+mask_non_image_embeddings: false
+
+# prompt for vision model
+visual_prompt_command: "Describe this image."
+
+# watching folder
 watch_folder_path: "data/watch"
+
+# pdf image dpi rendered for embeddings & viewing
 pdf_render_dpi: 150
 
-# Optional Google Gemini multimodal RAG settings
+# Output directory for saved retrieved page images
+images_output_dir: "data/rr"
+
+# Google Gemini multimodal RAG settings
+# If gemini_api_key is omitted/empty, GEMINI_API_KEY / GOOGLE_API_KEY env vars are used.
 gemini_api_key: ""
 gemini_model: "gemini-3.6-flash"
-rag_top_k: 3
+rag_top_k: 5
+
+# Quantization precision mode: "f32" (default) or "qi8" (quantized INT8)
+quantization: "f32"
 ```
 
 ### 2. Start the Indexing Server
@@ -119,12 +113,17 @@ python -m bbq.src.main server --config config.yaml
 Search indexed documents from the command line:
 
 ```bash
-# Fetch top 10 matching pages (prints ASCII BBQ banner on run)
+# Fetch top matching pages (prints ASCII BBQ banner on run)
 bbq client "What was the operating margin in Q3?"
 # Or: python -m bbq.src.main query "What was the operating margin in Q3?"
 
 # Fetch without ASCII logo banner
 bbq client --without-logo "What was the operating margin in Q3?"
+
+# Save retrieved page images to disk (default: data/rr/) in background
+bbq client "What is UX design?" --save-images
+# Or using shorthand flags with custom output directory:
+bbq client "What is UX design?" -i -o data/rr/
 
 # Query with Gemini Multimodal LLM (displays live cooking spinner and multimodal answer)
 export GEMINI_API_KEY="your-gemini-api-key"
@@ -132,12 +131,19 @@ bbq client "Summarize the revenue growth" --use-llm
 
 # Continuous interactive query prompt loop (--infinite / -inf)
 bbq client --infinite
-# Or with LLM cooking enabled:
-bbq client --infinite --use-llm
+# Or with image saving and LLM cooking enabled:
+bbq client --infinite -i --use-llm
 
 # Run directly via the client module
 python -m bbq.src.client --infinite --use-llm
 ```
+
+#### Interactive Document Page Opener
+When querying in an interactive terminal, BBQ displays an interactive page picker:
+- **`↑` / `↓`** or **`j` / `k`**: Navigate between top retrieved PDF document pages.
+- **`Enter`**: Open the selected document at that exact page in your system PDF viewer (`evince`, `okular`, or `xdg-open`).
+- **`Esc` / `q`** (or selecting **`Done`**): Proceed to display results and return to prompt.
+- Pass **`--without-opener`** (or **`--no-opener`**) to bypass the interactive picker and immediately print matching pages.
 
 In `--infinite` mode, an interactive prompt (`bbq[query] >> `) appears for continuous querying:
 - Type any query to search.
@@ -149,24 +155,41 @@ If no Gemini API key is provided or the API is unavailable, the client automatic
 
 ### 4. Python API Usage
 
-#### Client Query & RAG
+#### Client Query, Image Saving & RAG
 
 ```python
 from bbq.src.client import BBQClient
-from bbq.src.config import load_configuration_from_yaml_file
+from bbq.src.config import Config
 
-config = load_configuration_from_yaml_file("config.yaml")
+config = Config.from_yaml("config.yaml")
 client = BBQClient(server_url="http://localhost:8000", config=config)
 
+# 1. Standard retrieval query
+results = client.query(query_text="Explain the cash flow breakdown in the report", top_k=5)
+
+# 2. Save retrieved page images to disk (default configured dir: data/rr)
+saved_paths = client.save_page_images(results)
+print(f"Saved {len(saved_paths)} images to data/rr")
+
+# Or save asynchronously in a background daemon thread:
+# thread = client.save_page_images_threaded(
+#     results,
+#     on_progress=lambda curr, total, path: print(f"Saved {curr}/{total}: {path}"),
+#     on_complete=lambda paths: print(f"All {len(paths)} images saved!")
+# )
+
+# 3. Multimodal answer generation with Gemini
 response = client.query_and_answer(
     query_text="Explain the cash flow breakdown in the report",
     top_k=3,
+    use_llm=True,
+    save_images=True,
 )
 
 if response["answer"]:
     print("Gemini Multimodal Answer:\n", response["answer"])
 else:
-    print("Retrieved Book Pages (Fallback):")
+    print("Retrieved Document Pages (Fallback):")
     for source in response["sources"]:
         print(f"File: {source['file_path']} | Page: {source['page_number']} | Score: {source['score']:.4f}")
 ```
@@ -198,22 +221,18 @@ print("Top 5 Document Scores:", scores[:5])
 Run the full integration test suite and Rust unit tests:
 
 ```bash
-# Run Python integration and regression tests (7 test suites)
-python3 -m pytest
+# Run Python unit and regression tests
+pytest
 
-# Run Rust unit tests (47 tests for BLAS and AVX2 kernels)
+# Run tests in CI mode (headless, skips GUI viewer tests)
+CI=true pytest
+
+# Run Rust unit tests (BLAS and AVX2 kernels)
 cargo test
 
 # Run scaling and ViDoRe benchmark suite
 python3 benchmarks
 ```
-
----
-
-## Roadmap & TODO
-- [ ] **Audit Boilerplate & Fix Errors for Scalability**: Review and harden all boilerplate code, fix edge-case runtime errors, eliminate redundant allocations, and optimize the codebase for production-grade throughput and scalability.
-- [ ] **Eliminate Circular Dependencies**: Audit and refactor inter-module imports across `client`, `server`, `storage`, and `config`.
-- [ ] **Origins & Attribution Reference**: See [ABOUT.md](ABOUT.md) for full project lineage, paper citations ([ColPali arXiv:2407.01449](https://arxiv.org/abs/2407.01449)), `maxsim-cpu` references, and reserved rights notices.
 
 ---
 

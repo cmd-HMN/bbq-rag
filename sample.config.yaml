@@ -26,6 +26,9 @@ watch_folder_path: "data/watch"
 # pdf image dpi will be send to the model
 pdf_render_dpi: 150
 
+# Output directory for saved retrieved page images
+images_output_dir: "data/rr"
+
 # Google Gemini multimodal RAG settings
 # If gemini_api_key is omitted/empty, GEMINI_API_KEY / GOOGLE_API_KEY env vars are used.
 gemini_api_key: ""
