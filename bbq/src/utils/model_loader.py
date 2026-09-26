@@ -1,8 +1,17 @@
 from typing import Any, List, Optional, Tuple, Type, Union
 
 import torch
-from peft import PeftConfig, PeftModel
-from transformers import logging as tf_logging
+
+try:
+    from peft import PeftConfig, PeftModel
+except ImportError:
+    PeftConfig = Any  # type: ignore
+    PeftModel = Any  # type: ignore
+
+try:
+    from transformers import logging as tf_logging
+except ImportError:
+    import logging as tf_logging  # type: ignore
 
 from bbq.src.common.base import (
     BaseEngineWrapper,
@@ -32,9 +41,11 @@ logging.getLogger("bitsandbytes").setLevel(logging.ERROR)
 warnings.filterwarnings("ignore", message=".*BNB_CUDA_VERSION.*")
 warnings.filterwarnings("ignore", module=".*bitsandbytes.*")
 
-tf_logging.set_verbosity_error()
+if hasattr(tf_logging, "set_verbosity_error"):
+    tf_logging.set_verbosity_error()
 try:
-    tf_logging.disable_progress_bar()
+    if hasattr(tf_logging, "disable_progress_bar"):
+        tf_logging.disable_progress_bar()
 except Exception:
     pass
 
