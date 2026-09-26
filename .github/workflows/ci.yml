@@ -47,7 +47,7 @@ jobs:
       # 7. Build and install BBQ package via pip
       - name: Build and install BBQ (Release)
         run: |
-          pip install .
+          pip install -e .
 
       # 8. Check BBQ version and CLI
       - name: Verify BBQ version and CLI

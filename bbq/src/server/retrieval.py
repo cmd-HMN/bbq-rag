@@ -25,7 +25,11 @@ def query_indexed_documents(
 
     import numpy as np
     import torch
-    from maxsimd import maxsim
+
+    try:
+        from bbq.maxsimd import maxsim
+    except ImportError:
+        from maxsimd import maxsim
 
     records = tracker.fetch_all_records()
     completed_records = [
@@ -37,9 +41,7 @@ def query_indexed_documents(
         return []
 
     effective_top_k = (
-        int(top_k)
-        if top_k is not None
-        else getattr(engine.config, "rag_top_k", 5)
+        int(top_k) if top_k is not None else getattr(engine.config, "rag_top_k", 5)
     )
 
     # Encode query: shape [1, q_len, dim] -> [q_len, dim]
@@ -47,9 +49,7 @@ def query_indexed_documents(
     q_mat = q_tensor[0].cpu().float().numpy()
 
     # Check configured quantization mode
-    quant_mode = (
-        getattr(engine.config, "quantization", None) or "f32"
-    ).strip().lower()
+    quant_mode = (getattr(engine.config, "quantization", None) or "f32").strip().lower()
     use_quant = quant_mode in ("qi8", "int8")
 
     q_val = None
@@ -76,9 +76,7 @@ def query_indexed_documents(
         try:
             loaded = np.load(emb_path)
         except Exception as load_err:
-            logger.error(
-                f"Failed to load embedding file '{emb_path}': {load_err}"
-            )
+            logger.error(f"Failed to load embedding file '{emb_path}': {load_err}")
             continue
 
         # Check if saved file is quantized (.npz with values and scales)
@@ -107,9 +105,7 @@ def query_indexed_documents(
                     )
                     continue
             else:
-                scores = maxsim(
-                    q_val, doc_val, q_scale=q_scale, d_scale=doc_scale
-                )
+                scores = maxsim(q_val, doc_val, q_scale=q_scale, d_scale=doc_scale)
         else:
             doc_emb = loaded
             if doc_emb.ndim == 2:
@@ -121,9 +117,7 @@ def query_indexed_documents(
                 from bbq.maxsimd.quantization import qi8
 
                 doc_val, doc_scale = qi8(doc_emb, dim=128)
-                scores = maxsim(
-                    q_val, doc_val, q_scale=q_scale, d_scale=doc_scale
-                )
+                scores = maxsim(q_val, doc_val, q_scale=q_scale, d_scale=doc_scale)
             else:
                 scores = maxsim(q_mat, doc_emb)
 
