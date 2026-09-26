@@ -31,6 +31,7 @@ def test_config_defaults():
     assert config.gemini_model == "gemini-3.6-flash"
     assert config.rag_top_k == 3
     assert config.quantization == "f32"
+    assert config.images_output_dir == "data/rr"
 
 
 def test_config_custom_initialization():

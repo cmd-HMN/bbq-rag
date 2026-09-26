@@ -4,7 +4,12 @@ import torch
 from peft import PeftConfig, PeftModel
 from transformers import logging as tf_logging
 
-from bbq.src.common.base import BaseEngineWrapper, BaseModel, BaseModelLoader, BaseProcessor
+from bbq.src.common.base import (
+    BaseEngineWrapper,
+    BaseModel,
+    BaseModelLoader,
+    BaseProcessor,
+)
 from bbq.src.common.errors import (
     BaseModelInstantiateError,
     LoRAAdapterLoadError,
@@ -13,7 +18,25 @@ from bbq.src.common.errors import (
 from bbq.src.config import Config
 from bbq.src.models.registry import ModelRegistry
 
-tf_logging.set_verbosity_warning()
+import os
+import logging
+import warnings
+
+# Disable progress bars and warnings during weight loading
+os.environ["TQDM_DISABLE"] = "1"
+os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
+os.environ["TRANSFORMERS_NO_ADVISORY_WARNINGS"] = "1"
+
+# Silence bitsandbytes BNB_CUDA_VERSION override warning
+logging.getLogger("bitsandbytes").setLevel(logging.ERROR)
+warnings.filterwarnings("ignore", message=".*BNB_CUDA_VERSION.*")
+warnings.filterwarnings("ignore", module=".*bitsandbytes.*")
+
+tf_logging.set_verbosity_error()
+try:
+    tf_logging.disable_progress_bar()
+except Exception:
+    pass
 
 
 def determine_target_torch_device(device_preference: str = "auto") -> str:
@@ -23,7 +46,9 @@ def determine_target_torch_device(device_preference: str = "auto") -> str:
     return device_preference
 
 
-def resolve_torch_data_type(dtype_name: str = "bfloat16", target_device: str = "cpu") -> torch.dtype:
+def resolve_torch_data_type(
+    dtype_name: str = "bfloat16", target_device: str = "cpu"
+) -> torch.dtype:
     """Resolve the torch data type based on name and target device."""
     if target_device == "cpu":
         return torch.float32
@@ -34,13 +59,27 @@ def resolve_torch_data_type(dtype_name: str = "bfloat16", target_device: str = "
     return torch.float32
 
 
+def _from_pretrained_fast(loader_cls_or_fn: Any, model_id_or_obj: Any, **kwargs: Any) -> Any:
+    """Load model/adapter/processor from local huggingface cache first to avoid network latency."""
+    try:
+        return loader_cls_or_fn.from_pretrained(
+            model_id_or_obj, local_files_only=True, **kwargs
+        )
+    except Exception:
+        return loader_cls_or_fn.from_pretrained(
+            model_id_or_obj, local_files_only=False, **kwargs
+        )
+
+
 class EngineModelLoader(BaseModelLoader):
     """
     Class for loading engine models
     """
 
     @classmethod
-    def load_model_and_processor(cls, config_input: Any) -> Tuple[Union[BaseModel, PeftModel], BaseProcessor]:
+    def load_model_and_processor(
+        cls, config_input: Any
+    ) -> Tuple[Union[BaseModel, PeftModel], BaseProcessor]:
         return cls.load_model_with_lora_adapters(config_input)
 
     @staticmethod
@@ -64,12 +103,15 @@ class EngineModelLoader(BaseModelLoader):
             config = config_input
 
         target_device = determine_target_torch_device(config.device)
-        resolved_dtype: torch.dtype = resolve_torch_data_type(config.torch_dtype, target_device)
+        resolved_dtype: torch.dtype = resolve_torch_data_type(
+            config.torch_dtype, target_device
+        )
 
         model_cls, processor_cls = ModelRegistry.get_for_model(config.base_model_id)
 
         try:
-            base_model: Any = model_cls.from_pretrained(
+            base_model: Any = _from_pretrained_fast(
+                model_cls,
                 config.base_model_id,
                 torch_dtype=resolved_dtype,
             )
@@ -82,12 +124,24 @@ class EngineModelLoader(BaseModelLoader):
 
         if config.lora_adapter_id:
             try:
-                lora_adapter_config: PeftConfig = PeftConfig.from_pretrained(config.lora_adapter_id)
-                model_to_use = PeftModel.from_pretrained(
-                    base_model,
+                lora_adapter_config: PeftConfig = _from_pretrained_fast(
+                    PeftConfig,
                     config.lora_adapter_id,
-                    config=lora_adapter_config,
                 )
+                try:
+                    model_to_use = PeftModel.from_pretrained(
+                        base_model,
+                        config.lora_adapter_id,
+                        config=lora_adapter_config,
+                        local_files_only=True,
+                    )
+                except Exception:
+                    model_to_use = PeftModel.from_pretrained(
+                        base_model,
+                        config.lora_adapter_id,
+                        config=lora_adapter_config,
+                        local_files_only=False,
+                    )
             except Exception as exception_instance:
                 raise LoRAAdapterLoadError(
                     f"Failed to load and apply LoRA adapter weights from {config.lora_adapter_id}: {exception_instance}"
@@ -96,10 +150,16 @@ class EngineModelLoader(BaseModelLoader):
         model_to_use = model_to_use.to(target_device).eval()
 
         try:
-            processor: BaseProcessor = processor_cls.from_pretrained(config.base_model_id)
+            processor: BaseProcessor = _from_pretrained_fast(
+                processor_cls,
+                config.base_model_id,
+            )
         except Exception:
             try:
-                processor = processor_cls.from_pretrained(config.lora_adapter_id)
+                processor = _from_pretrained_fast(
+                    processor_cls,
+                    config.lora_adapter_id,
+                )
             except Exception as exception_instance:
                 raise ProcessorLoadError(
                     f"Failed to load processor from {config.base_model_id} or {config.lora_adapter_id}: {exception_instance}"
@@ -124,7 +184,9 @@ class EngineWrapper(BaseEngineWrapper):
         self.processor = processor
         self.config: Config = config
 
-    def encode_multimodal_document_images(self, images: List[Any], batch_size: int = 4) -> torch.Tensor:
+    def encode_multimodal_document_images(
+        self, images: List[Any], batch_size: int = 4
+    ) -> torch.Tensor:
         """
         Encodes a list of images into embeddings using sub-batching to prevent OOM errors on large documents.
         """
@@ -138,7 +200,8 @@ class EngineWrapper(BaseEngineWrapper):
             batch_images = images[i : i + batch_size]
             processed_inputs = self.processor.process_images(batch_images)
             processed_inputs = {
-                k: v.to(target_device) if isinstance(v, torch.Tensor) else v for k, v in processed_inputs.items()
+                k: v.to(target_device) if isinstance(v, torch.Tensor) else v
+                for k, v in processed_inputs.items()
             }
 
             with torch.inference_mode():
@@ -160,7 +223,8 @@ class EngineWrapper(BaseEngineWrapper):
         processed_inputs = self.processor.process_texts(texts)
         target_device = next(self.model.parameters()).device
         processed_inputs = {
-            k: v.to(target_device) if isinstance(v, torch.Tensor) else v for k, v in processed_inputs.items()
+            k: v.to(target_device) if isinstance(v, torch.Tensor) else v
+            for k, v in processed_inputs.items()
         }
 
         with torch.inference_mode():

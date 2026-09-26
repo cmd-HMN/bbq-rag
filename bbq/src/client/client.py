@@ -7,7 +7,8 @@ from __future__ import annotations
 import os
 import io
 import logging
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+import threading
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 import requests
 from PIL import Image
 
@@ -70,13 +71,22 @@ class BBQClient:
         self,
         file_path: str,
         page_number: int = 1,
-        dpi: int = 150,
+        dpi: Optional[int] = None,
         save_path: Optional[str] = None,
     ) -> Image.Image:
         """Fetches rendered PNG page image from the server and optionally saves it."""
+        render_dpi = (
+            dpi
+            if dpi is not None
+            else (getattr(self.config, "pdf_render_dpi", 150) if self.config else 150)
+        )
         resp = requests.get(
             f"{self.server_url}/page_image",
-            params={"file_path": file_path, "page_number": page_number, "dpi": dpi},
+            params={
+                "file_path": file_path,
+                "page_number": page_number,
+                "dpi": render_dpi,
+            },
             timeout=15,
         )
         resp.raise_for_status()
@@ -85,6 +95,160 @@ class BBQClient:
             os.makedirs(os.path.dirname(save_path) or ".", exist_ok=True)
             img.save(save_path, format="PNG")
         return img
+
+    def fetch_page_images(
+        self,
+        results: List[Dict[str, Any]],
+        save_images: bool = False,
+        images_output_dir: Optional[str] = None,
+    ) -> List[Image.Image]:
+        """
+        Fetches page images for retrieved results and optionally saves them to disk.
+        Default output directory is data/rr.
+        Updates each result dict in results with 'image_available' and 'saved_image_path'.
+        """
+        out_dir = images_output_dir
+        if not out_dir and self.config:
+            out_dir = getattr(self.config, "images_output_dir", None)
+        out_dir = out_dir or "data/rr"
+
+        if save_images:
+            os.makedirs(out_dir, exist_ok=True)
+
+        page_images: List[Image.Image] = []
+        for i, res in enumerate(results, 1):
+            pnum = res.get("page_number", 1)
+            save_path = (
+                os.path.join(out_dir, f"rr_{i}_{pnum}.png") if save_images else None
+            )
+            img = None
+            try:
+                img = self.get_page_image(res["file_path"], pnum, save_path=save_path)
+            except Exception as e:
+                logger.debug(
+                    f"Remote page image request failed for {res.get('file_path')}: {e}"
+                )
+                if os.path.exists(res.get("file_path", "")):
+                    try:
+                        dpi = (
+                            getattr(self.config, "pdf_render_dpi", 150)
+                            if self.config
+                            else 150
+                        )
+                        img = get_local_pdf_page_image(
+                            res["file_path"], pnum, dpi=dpi, save_path=save_path
+                        )
+                    except Exception as le:
+                        logger.debug(
+                            f"Local page image extraction failed for {res.get('file_path')}: {le}"
+                        )
+            if img:
+                page_images.append(img)
+                res["image_available"] = True
+                if save_path:
+                    res["saved_image_path"] = save_path
+            else:
+                res["image_available"] = False
+        return page_images
+
+    def save_page_images(
+        self,
+        results: List[Dict[str, Any]],
+        images_output_dir: Optional[str] = None,
+    ) -> List[str]:
+        """
+        Fetches and saves rendered page images for retrieved results to disk (default: data/rr).
+        Returns a list of saved file paths.
+        """
+        self.fetch_page_images(
+            results=results,
+            save_images=True,
+            images_output_dir=images_output_dir,
+        )
+        return [
+            res["saved_image_path"] for res in results if res.get("saved_image_path")
+        ]
+
+    def save_page_images_threaded(
+        self,
+        results: List[Dict[str, Any]],
+        images_output_dir: Optional[str] = None,
+        on_progress: Optional[Callable[[int, int, str], None]] = None,
+        on_complete: Optional[Callable[[List[str]], None]] = None,
+    ) -> threading.Thread:
+        """
+        Launches a background daemon thread to fetch and save page images asynchronously.
+        Calls on_progress(current_idx, total_count, saved_path) as each image is saved.
+        Calls on_complete(saved_paths) when all images have finished saving.
+        Returns the spawned background threading.Thread instance.
+        """
+
+        def _worker() -> None:
+            out_dir = images_output_dir
+            if not out_dir and self.config:
+                out_dir = getattr(self.config, "images_output_dir", None)
+            out_dir = out_dir or "data/rr"
+            os.makedirs(out_dir, exist_ok=True)
+
+            saved_paths: List[str] = []
+            total = len(results)
+
+            for i, res in enumerate(results, 1):
+                pnum = res.get("page_number", 1)
+                save_path = os.path.join(out_dir, f"rr_{i}_{pnum}.png")
+                img = None
+                try:
+                    img = self.get_page_image(
+                        res["file_path"], pnum, save_path=save_path
+                    )
+                except Exception as e:
+                    logger.debug(
+                        f"Remote page image request failed for {res.get('file_path')}: {e}"
+                    )
+                    if os.path.exists(res.get("file_path", "")):
+                        try:
+                            dpi = (
+                                getattr(self.config, "pdf_render_dpi", 150)
+                                if self.config
+                                else 150
+                            )
+                            img = get_local_pdf_page_image(
+                                res["file_path"], pnum, dpi=dpi, save_path=save_path
+                            )
+                        except Exception as le:
+                            logger.debug(
+                                f"Local page image extraction failed for {res.get('file_path')}: {le}"
+                            )
+                if img:
+                    res["image_available"] = True
+                    res["saved_image_path"] = save_path
+                    saved_paths.append(save_path)
+                    if on_progress:
+                        try:
+                            on_progress(i, total, save_path)
+                        except Exception:
+                            pass
+                else:
+                    res["image_available"] = False
+                    if on_progress:
+                        try:
+                            on_progress(i, total, "")
+                        except Exception:
+                            pass
+
+            if on_complete:
+                try:
+                    on_complete(saved_paths)
+                except Exception:
+                    pass
+
+        thread = threading.Thread(
+            target=_worker,
+            name="BBQImageSaverThread",
+            daemon=True,
+        )
+        thread.start()
+        return thread
 
     def generate_answer_from_results(
         self,
@@ -98,36 +262,11 @@ class BBQClient:
         """
         Fetches page images for retrieved results and generates a grounded multimodal answer with Gemini.
         """
-        page_images: List[Image.Image] = []
-        for i, res in enumerate(results, 1):
-            save_path = (
-                os.path.join(
-                    images_output_dir or ".",
-                    f"retrieved_rank_{i}_page_{res['page_number']}.png",
-                )
-                if save_images
-                else None
-            )
-            img = None
-            try:
-                img = self.get_page_image(
-                    res["file_path"], res["page_number"], save_path=save_path
-                )
-            except Exception:
-                if os.path.exists(res.get("file_path", "")):
-                    try:
-                        img = get_local_pdf_page_image(
-                            res["file_path"], res["page_number"], save_path=save_path
-                        )
-                    except Exception:
-                        pass
-            if img:
-                page_images.append(img)
-                res["image_available"] = True
-                if save_path:
-                    res["saved_image_path"] = save_path
-            else:
-                res["image_available"] = False
+        page_images = self.fetch_page_images(
+            results=results,
+            save_images=save_images,
+            images_output_dir=images_output_dir,
+        )
 
         if self.config:
             gemini_api_key = gemini_api_key or getattr(
@@ -191,6 +330,7 @@ class BBQClient:
         """
         Retrieves top_k pages. If use_llm is True, passes retrieved pages to Gemini LLM.
         Otherwise, returns retrieved matches directly without calling LLM.
+        If save_images is True, saves page images to disk (default: data/rr).
         """
         suppress_logo = self.without_logo if without_logo is None else without_logo
         if not suppress_logo:
@@ -208,6 +348,10 @@ class BBQClient:
             }
 
         if not use_llm:
+            if save_images:
+                self.save_page_images(
+                    results=results, images_output_dir=images_output_dir
+                )
             return {
                 "query": query_text,
                 "answer": None,
