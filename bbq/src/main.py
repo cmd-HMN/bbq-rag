@@ -1,17 +1,18 @@
 import sys
 import argparse
 import logging
-from bbq.src.common.version import __version__, _read_project_version
+from bbq.src.common.version import __version__
 
 
 def run_server_command(args: argparse.Namespace) -> None:
     """Launches the persistent document-indexing server."""
-    from bbq.src.config import Config
-    from bbq.src.server import start_document_indexing_server
     from bbq.src.terminal.tui import print_bbq
 
     if not getattr(args, "without_logo", False):
         print_bbq(tag="SERVER", server=getattr(args, "port", 8000))
+
+    from bbq.src.config import Config
+    from bbq.src.server import start_document_indexing_server
 
     config = Config.from_yaml(config_filepath=args.config)
     start_document_indexing_server(
@@ -19,6 +20,7 @@ def run_server_command(args: argparse.Namespace) -> None:
         config_filepath=args.config,
         host=args.host,
         port=args.port,
+        without_logo=True,
     )
 
 
@@ -118,11 +120,66 @@ def run_client_query_command(args: argparse.Namespace) -> None:
             if not results:
                 console.print("[yellow]No matching PDF pages found.[/yellow]")
             else:
+                save_images_requested = getattr(args, "save_images", False) or bool(
+                    getattr(args, "images_output_dir", None)
+                )
+                images_out_dir = getattr(args, "images_output_dir", None) or getattr(
+                    config, "images_output_dir", "data/rr"
+                )
+
+                save_status = None
+                save_thread = None
+                if save_images_requested and not use_llm:
+                    save_status = {
+                        "active": True,
+                        "completed": False,
+                        "saved_count": 0,
+                        "total": len(results),
+                        "output_dir": images_out_dir,
+                        "saved_paths": [],
+                    }
+
+                    def _on_progress(idx: int, total: int, path: str) -> None:
+                        if path and save_status is not None:
+                            save_status["saved_count"] += 1
+                            save_status["saved_paths"].append(path)
+
+                    def _on_complete(paths: list) -> None:
+                        if save_status is not None:
+                            save_status["completed"] = True
+                            save_status["active"] = False
+
+                    save_thread = client.save_page_images_threaded(
+                        results=results,
+                        images_output_dir=images_out_dir,
+                        on_progress=_on_progress,
+                        on_complete=_on_complete,
+                    )
+
                 # 2. Interactive arrow-key page picker (Option C) unless --without-opener is passed
                 if not getattr(args, "without_opener", False) and sys.stdin.isatty():
                     interactive_page_picker(results, console=console)
                 else:
                     render_query_results_rich(results, console=console)
+
+                if save_images_requested and not use_llm:
+                    if save_thread and save_thread.is_alive():
+                        if not is_infinite:
+                            save_thread.join(timeout=5.0)
+
+                    saved_count = (
+                        save_status["saved_count"]
+                        if save_status
+                        else len([r for r in results if r.get("saved_image_path")])
+                    )
+                    if saved_count > 0:
+                        console.print(
+                            f"[bold green]✔ Saved {saved_count} page image(s) to {images_out_dir}[/bold green]\n"
+                        )
+                    elif save_status and not save_status.get("active"):
+                        console.print(
+                            f"[bold yellow]⚠ Could not save page images to {images_out_dir}[/bold yellow]\n"
+                        )
 
                 # 3. If --use-llm is specified, pass top-k to LLM with cooking spinner
                 if use_llm:
@@ -135,8 +192,20 @@ def run_client_query_command(args: argparse.Namespace) -> None:
                             results=results,
                             gemini_api_key=gemini_key,
                             gemini_model=gemini_model,
-                            save_images=args.save_images,
+                            save_images=save_images_requested,
+                            images_output_dir=images_out_dir,
                         )
+
+                    if save_images_requested:
+                        saved_paths = [
+                            r["saved_image_path"]
+                            for r in results
+                            if r.get("saved_image_path")
+                        ]
+                        if saved_paths:
+                            console.print(
+                                f"[bold green]✔ Saved {len(saved_paths)} page image(s) to {images_out_dir}[/bold green]\n"
+                            )
 
                     answer = rag_response.get("answer")
                     if answer:
@@ -247,7 +316,9 @@ def build_argument_parser() -> argparse.ArgumentParser:
 
     # --- Server Command ---
     server_parser = subparsers.add_parser(
-        "server", help="Start persistent document indexing HTTP server"
+        "server",
+        parents=[client_parent],
+        help="Start persistent document indexing HTTP server",
     )
     server_parser.add_argument(
         "--config",
@@ -333,7 +404,17 @@ def build_argument_parser() -> argparse.ArgumentParser:
         help="Gemini model name (default from config: gemini-3.6-flash)",
     )
     query_parser.add_argument(
-        "--save-images", "-i", action="store_true", help="Save page images to disk"
+        "--save-images",
+        "-i",
+        action="store_true",
+        help="Save page images to disk (default output: data/rr)",
+    )
+    query_parser.add_argument(
+        "--images-output-dir",
+        "-o",
+        type=str,
+        default=None,
+        help="Directory to save page images (default from config: data/rr)",
     )
     query_parser.add_argument(
         "--verbose",
@@ -427,7 +508,17 @@ def build_client_main_parser() -> argparse.ArgumentParser:
         "--gemini-model", type=str, default=None, help="Gemini model name"
     )
     parser.add_argument(
-        "--save-images", "-i", action="store_true", help="Save page images to disk"
+        "--save-images",
+        "-i",
+        action="store_true",
+        help="Save page images to disk (default output: data/rr)",
+    )
+    parser.add_argument(
+        "--images-output-dir",
+        "-o",
+        type=str,
+        default=None,
+        help="Directory to save page images (default from config: data/rr)",
     )
     parser.add_argument(
         "--without-logo",
@@ -451,6 +542,10 @@ def build_client_main_parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
+    from bbq.src.common.hardware import verify_hardware_or_exit
+
+    verify_hardware_or_exit()
+
     # Backward compatibility fallback: if run as 'python -m bbq.src.main [config.yaml]' without subcommands
     if (
         len(sys.argv) > 1

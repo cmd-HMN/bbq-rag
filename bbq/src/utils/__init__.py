@@ -1,5 +1,10 @@
 import importlib
-from typing import Any
+from typing import Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from bbq.src.common.base import BaseModelLoader, BaseProcessor, BaseEngineWrapper
+
+    from bbq.src.utils.model_loader import initialize_engine
 
 from bbq.src.utils.futils import get_system_cache_dir
 from bbq.src.utils.pdf_utils import (
@@ -16,14 +21,17 @@ _LAZY_IMPORTS = {
     "EngineWrapper": "bbq.src.utils.model_loader",
     "initialize_engine": "bbq.src.utils.model_loader",
     "initialize_engine_from_yaml_config": "bbq.src.utils.model_loader",
-    "PDFWatchHandler": "bbq.src.utils.watcher",
-    "start_pdf_folder_watcher": "bbq.src.utils.watcher",
+    "model_loader": "bbq.src.utils.model_loader",
+    "watcher": "bbq.src.utils.watcher",
 }
 
 
 def __getattr__(name: str) -> Any:
     if name in _LAZY_IMPORTS:
-        module = importlib.import_module(_LAZY_IMPORTS[name])
+        target_path = _LAZY_IMPORTS[name]
+        module = importlib.import_module(target_path)
+        if target_path.endswith(f".{name}"):
+            return module
         return getattr(module, name)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 

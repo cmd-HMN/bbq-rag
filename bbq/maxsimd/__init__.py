@@ -6,6 +6,13 @@ try:
 except ImportError:
     torch = None  # type: ignore
 
+try:
+    from bbq.src.common.hardware import verify_hardware_or_exit
+
+    verify_hardware_or_exit()
+except ImportError:
+    pass
+
 from .maxsimd import (
     maxsim as _raw_maxsim,
     __version__,

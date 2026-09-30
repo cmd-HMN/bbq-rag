@@ -18,13 +18,13 @@ DIM = "\033[90m"
 BOLD = "\033[1m"
 
 
-def create_rich_console_logging_handler() -> RichHandler:
-    return RichHandler(
-        console=Console(),
-        show_path=False,
-        rich_tracebacks=True,
-        markup=True,
-    )
+def create_rich_console_logging_handler() -> logging.Handler:
+    import sys
+    from bbq.src.terminal.logger import BBQConsoleLogFormatter
+
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(BBQConsoleLogFormatter(datefmt="%Y-%m-%d %H:%M:%S"))
+    return handler
 
 
 def render_server_status_rich_panel(config: Config) -> Panel:

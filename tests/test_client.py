@@ -416,7 +416,6 @@ def test_interactive_page_picker_non_tty(capsys):
     assert "design.pdf" in out
 
 
-
 def test_without_opener_flag(monkeypatch, capsys):
     """Verify that --without-opener bypasses interactive_page_picker and prints static results."""
     from bbq.src.main import run_client_query_command
@@ -444,3 +443,191 @@ def test_without_opener_flag(monkeypatch, capsys):
     assert len(mock_picker_called) == 0
     out = capsys.readouterr().out
     assert "Top 1 Matching PDF Pages" in out
+
+
+@patch.object(BBQClient, "get_page_image")
+def test_client_save_page_images(mock_get_img, tmp_path):
+    """Verify BBQClient.save_page_images saves page images with proper filenames to disk."""
+    dummy_img = Image.new("RGB", (20, 20), color="red")
+
+    def fake_get_page_image(file_path, page_number=1, dpi=None, save_path=None):
+        if save_path:
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
+            dummy_img.save(save_path, format="PNG")
+        return dummy_img
+
+    mock_get_img.side_effect = fake_get_page_image
+
+    client = BBQClient()
+    results = [
+        {"file_path": "docA.pdf", "page_number": 12, "score": 4.1},
+        {"file_path": "docB.pdf", "page_number": 45, "score": 3.2},
+    ]
+    out_dir = str(tmp_path / "saved_rr")
+    saved_paths = client.save_page_images(results, images_output_dir=out_dir)
+
+    assert len(saved_paths) == 2
+    assert os.path.exists(os.path.join(out_dir, "rr_1_12.png"))
+    assert os.path.exists(os.path.join(out_dir, "rr_2_45.png"))
+    assert results[0]["image_available"] is True
+    assert results[0]["saved_image_path"] == os.path.join(out_dir, "rr_1_12.png")
+    assert results[1]["saved_image_path"] == os.path.join(out_dir, "rr_2_45.png")
+
+
+@patch.object(BBQClient, "query")
+@patch.object(BBQClient, "get_page_image")
+def test_client_query_and_answer_save_images_without_llm(
+    mock_get_img, mock_query, tmp_path
+):
+    """Verify query_and_answer with use_llm=False and save_images=True saves images without calling LLM."""
+    dummy_img = Image.new("RGB", (10, 10), color="green")
+
+    def fake_get_page_image(file_path, page_number=1, dpi=None, save_path=None):
+        if save_path:
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
+            dummy_img.save(save_path, format="PNG")
+        return dummy_img
+
+    mock_get_img.side_effect = fake_get_page_image
+    mock_query.return_value = [
+        {"file_path": "manual.pdf", "page_number": 7, "score": 2.9}
+    ]
+
+    out_dir = str(tmp_path / "retrieval_images")
+    client = BBQClient()
+    resp = client.query_and_answer(
+        "search terms",
+        top_k=5,
+        use_llm=False,
+        save_images=True,
+        images_output_dir=out_dir,
+    )
+
+    assert resp["status"] == "retrieval_only"
+    assert resp["answer"] is None
+    assert os.path.exists(os.path.join(out_dir, "rr_1_7.png"))
+
+
+def test_cli_save_images_flags_parsing():
+    """Verify parsing of --save-images, -i, and --images-output-dir / -o flags."""
+    parser = build_argument_parser()
+
+    args1 = parser.parse_args(["query", "search", "--save-images"])
+    assert args1.save_images is True
+
+    args2 = parser.parse_args(["client", "search", "-i"])
+    assert args2.save_images is True
+
+    args3 = parser.parse_args(["query", "search", "-i", "-o", "custom/dir"])
+    assert args3.save_images is True
+    assert args3.images_output_dir == "custom/dir"
+
+    client_parser = build_client_main_parser()
+    c_args1 = client_parser.parse_args(["search", "-i"])
+    assert c_args1.save_images is True
+
+    c_args2 = client_parser.parse_args(["search", "--images-output-dir", "custom/path"])
+    assert c_args2.images_output_dir == "custom/path"
+
+
+@patch.object(BBQClient, "query")
+@patch.object(BBQClient, "get_page_image")
+def test_cli_save_images_execution(mock_get_img, mock_query, tmp_path, capsys):
+    """Verify CLI saves images to specified directory when -i is passed without --use-llm."""
+    from bbq.src.main import run_client_query_command
+
+    dummy_img = Image.new("RGB", (10, 10), color="yellow")
+
+    def fake_get_page_image(file_path, page_number=1, dpi=None, save_path=None):
+        if save_path:
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
+            dummy_img.save(save_path, format="PNG")
+        return dummy_img
+
+    mock_get_img.side_effect = fake_get_page_image
+    mock_query.return_value = [
+        {"file_path": "doc.pdf", "page_number": 3, "total_pages": 10, "score": 3.0}
+    ]
+
+    out_dir = str(tmp_path / "cli_rr")
+    parser = build_argument_parser()
+    args = parser.parse_args(
+        [
+            "query",
+            "test save",
+            "-i",
+            "-o",
+            out_dir,
+            "--without-opener",
+            "--without-logo",
+        ]
+    )
+    run_client_query_command(args)
+
+    assert os.path.exists(os.path.join(out_dir, "rr_1_3.png"))
+    captured = capsys.readouterr().out
+    assert "Saved 1 page image(s)" in captured
+
+
+@patch.object(BBQClient, "get_page_image")
+def test_client_save_page_images_threaded(mock_get_img, tmp_path):
+    """Verify BBQClient.save_page_images_threaded executes in a background thread and fires callbacks."""
+    import threading
+
+    dummy_img = Image.new("RGB", (10, 10), color="purple")
+
+    def fake_get_page_image(file_path, page_number=1, dpi=None, save_path=None):
+        if save_path:
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
+            dummy_img.save(save_path, format="PNG")
+        return dummy_img
+
+    mock_get_img.side_effect = fake_get_page_image
+
+    progress_events = []
+    complete_events = []
+
+    def on_prog(idx, total, path):
+        progress_events.append((idx, total, path))
+
+    def on_comp(paths):
+        complete_events.append(paths)
+
+    client = BBQClient()
+    results = [
+        {"file_path": "ch1.pdf", "page_number": 5, "score": 4.0},
+        {"file_path": "ch2.pdf", "page_number": 9, "score": 3.8},
+    ]
+    out_dir = str(tmp_path / "threaded_rr")
+    thread = client.save_page_images_threaded(
+        results=results,
+        images_output_dir=out_dir,
+        on_progress=on_prog,
+        on_complete=on_comp,
+    )
+
+    assert isinstance(thread, threading.Thread)
+    thread.join(timeout=5.0)
+
+    assert os.path.exists(os.path.join(out_dir, "rr_1_5.png"))
+    assert os.path.exists(os.path.join(out_dir, "rr_2_9.png"))
+    assert len(progress_events) == 2
+    assert len(complete_events) == 1
+    assert len(complete_events[0]) == 2
+
+
+def test_render_query_results_rich_clean(capsys):
+    """Verify render_query_results_rich displays top matching pages cleanly without background banner."""
+    from bbq.src.terminal import render_query_results_rich
+
+    results = [
+        {"file_path": "p1.pdf", "page_number": 10},
+        {"file_path": "p2.pdf", "page_number": 20},
+    ]
+
+    render_query_results_rich(results)
+    out = capsys.readouterr().out
+    assert "Top 2 Matching PDF Pages" in out
+    assert "Saving in bg" not in out
+    assert "p1.pdf" in out
+    assert "p2.pdf" in out

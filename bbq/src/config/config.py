@@ -27,6 +27,7 @@ class Config:
     watch_folder_path: str = "data/watch"
     embeddings_output_path: Optional[str] = None
     sqlite_db_path: Optional[str] = None
+    images_output_dir: str = "data/rr"
     pdf_render_dpi: int = 150
     gemini_api_key: Optional[str] = None
     gemini_model: str = "gemini-3.6-flash"

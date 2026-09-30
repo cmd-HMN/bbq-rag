@@ -7,6 +7,7 @@ description = "This packages is the simd implementations of max sim function for
 license = "MIT"
 # readme = "README.md"
 keywords = ["maxsimd"]
+build = "build.rs"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [lib]
