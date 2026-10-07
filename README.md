@@ -1,6 +1,6 @@
 <div align="center">
 
-# <img src="assets/logo.png" alt="BBQ-RAG Logo" width="160" style="vertical-align: middle; margin-right: 12px;"/> BBQ-RAG
+# <img src="assets/logo.png" alt="BBQ-RAG Logo" width="160" style="vertical-align: middle; margin-right: 12px;"/> BBQ-RAG | [Demo](https://hafiz-muhammad-noor.site/bbq/demo)
 
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-0284c7)](https://www.python.org/)
