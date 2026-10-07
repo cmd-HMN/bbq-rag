@@ -68,7 +68,9 @@ def resolve_torch_data_type(
     return torch.float32
 
 
-def _from_pretrained_fast(loader_cls_or_fn: Any, model_id_or_obj: Any, **kwargs: Any) -> Any:
+def _from_pretrained_fast(
+    loader_cls_or_fn: Any, model_id_or_obj: Any, **kwargs: Any
+) -> Any:
     """Load model/adapter/processor from local huggingface cache first to avoid network latency."""
     try:
         return loader_cls_or_fn.from_pretrained(
@@ -143,6 +145,7 @@ class EngineModelLoader(BaseModelLoader):
                         config.lora_adapter_id,
                         config=lora_adapter_config,
                         local_files_only=True,
+                        autocast_adapter_dtype=False,
                     )
                 except Exception:
                     model_to_use = PeftModel.from_pretrained(
@@ -150,6 +153,7 @@ class EngineModelLoader(BaseModelLoader):
                         config.lora_adapter_id,
                         config=lora_adapter_config,
                         local_files_only=False,
+                        autocast_adapter_dtype=False,
                     )
             except Exception as exception_instance:
                 raise LoRAAdapterLoadError(
