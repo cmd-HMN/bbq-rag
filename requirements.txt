@@ -1,5 +1,5 @@
 torch>=2.14.1
-transformers>=5.19.0
+transformers>=5.20.1
 peft>=0.21.2
 safetensors>=0.8.0
 
@@ -7,7 +7,7 @@ pymupdf>=1.28.2
 Pillow>=12.3.0
 numpy>=2.2.6
 
-fastapi>=0.143.0
+fastapi>=0.148.0
 uvicorn>=0.54.0
 requests>=2.34.2
 
