@@ -1,19 +1,19 @@
 torch>=2.14.1
 transformers>=5.20.2
-peft>=0.21.2
+peft>=0.21.3
 safetensors>=0.8.0
 
 pymupdf>=1.28.2
 Pillow>=12.3.0
 numpy>=2.2.6
 
-fastapi>=0.162.2
+fastapi>=0.162.5
 uvicorn>=0.54.0
 requests>=2.34.2
 
 rich>=15.0.0
 watchdog>=6.0.0
-PyYAML>=6.0.3
+PyYAML>=6.0.4
 
 maturin>=1.15.0
 
